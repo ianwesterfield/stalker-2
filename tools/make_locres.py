@@ -8,6 +8,7 @@ UnrealLocres import cannot ADD keys, so this uses pylocres to append entries
 to a full copy of the vanilla file; the mod pak then overrides the whole file.
 Regenerate after every game patch that changes localization.
 """
+
 import csv
 import sys
 from pathlib import Path
