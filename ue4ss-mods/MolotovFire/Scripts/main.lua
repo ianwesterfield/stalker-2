@@ -44,8 +44,8 @@ local function spawnGroundFire(x, y, z)
             local life = ring.lifeMin + math.random() * (ring.lifeMax - ring.lifeMin)
             local transform = {
                 Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
-                Translation = { ring.scale, Y = ring.scale, Z = ring.scales(ang) * dist, Y = y + math.sin(ang) * dist, Z = z },
-                Scale3D = { X = 1, Y = 1, Z = 1 },
+                Translation = { X = x + math.cos(ang) * dist, Y = y + math.sin(ang) * dist, Z = z },
+                Scale3D = { X = ring.scale, Y = ring.scale, Z = ring.scale },
             }
             local ok, err = pcall(function()
                 local actor = gs:BeginDeferredActorSpawnFromClass(world, fireClass, transform, 1, nil)
@@ -112,7 +112,8 @@ LoopAsync(100, function()
                         log(string.format("DETONATION at %.0f %.0f %.0f (reads=%d)", t.x, t.y, t.z, t.seen or 0))
                         -- seen>=2 = it actually flew; equip-cycling despawns have zero reads
                         if (t.seen or 0) >= 2 then
-                            spawnGroundFire(t.x, t.y, t.z)
+                            local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z)
+                            if not okF then log("FIRE handler error: " .. tostring(errF)) end
                         end
                     end
                 end)
