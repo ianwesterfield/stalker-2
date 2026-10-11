@@ -129,6 +129,21 @@ LoopAsync(100, function()
     return false
 end)
 
+-- F7: prototype-registration oracle — try to conjure molotovs directly.
+RegisterKeyBind(Key.F7, function()
+    ExecuteInGameThread(function()
+        local pc = UEHelpers.GetPlayerController()
+        if not (pc and pc:IsValid()) then log("F7: no player controller") return end
+        for _, cmd in ipairs({
+            "XSpawnItemNearPlayer GrenadeMolotov 3",
+            "XCreateItemInInventory GrenadeMolotov 3",
+        }) do
+            local ok, err = pcall(function() pc:ConsoleCommand(cmd, false) end)
+            log("F7 sent: " .. cmd .. (ok and "" or (" ERR " .. tostring(err))))
+        end
+    end)
+end)
+
 -- F6: probe/load the fire class without needing a throw.
 RegisterKeyBind(Key.F6, function()
     ExecuteInGameThread(function()
