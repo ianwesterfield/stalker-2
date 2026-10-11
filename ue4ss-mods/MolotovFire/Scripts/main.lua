@@ -5,9 +5,14 @@ log("loaded")
 local UEHelpers = require("UEHelpers")
 
 local FIRE_CLASS_PATH = "/Game/GameLite/Blueprints/Anomalies/BP_ClassicFireAnomaly.BP_ClassicFireAnomaly_C"
-local FIRE_SECONDS = 20          -- ground burns this long
-local FIRE_COUNT = 3             -- patches per detonation (coverage)
-local FIRE_SPREAD = 220          -- cm offset ring around impact
+
+-- One throw = staggered pattern: fire guts out from the edges inward.
+-- { count, min/max distance (cm), min/max lifetime (s) }
+local RINGS = {
+    { count = 1, distMin = 0,   distMax = 0,   lifeMin = 30, lifeMax = 40 },  -- heart of the fire
+    { count = 4, distMin = 180, distMax = 300, lifeMin = 22, lifeMax = 32 },  -- inner ring
+    { count = 5, distMin = 400, distMax = 580, lifeMin = 14, lifeMax = 22 },  -- outer splash
+}
 
 -- Track live grenades; a vanished actor's last position = detonation site.
 local tracked = {}
@@ -30,24 +35,27 @@ local function spawnGroundFire(x, y, z)
         return
     end
     local spawned = 0
-    for i = 1, FIRE_COUNT do
-        -- first patch dead center, rest on a ring
-        local ang = math.random() * 2 * math.pi
-        local dist = (i == 1) and 0 or (FIRE_SPREAD * (0.6 + 0.4 * math.random()))
-        local transform = {
-            Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
-            Translation = { X = x + math.cos(ang) * dist, Y = y + math.sin(ang) * dist, Z = z },
-            Scale3D = { X = 1, Y = 1, Z = 1 },
-        }
-        local ok, err = pcall(function()
-            local actor = gs:BeginDeferredActorSpawnFromClass(world, fireClass, transform, 1, nil)
-            if actor and actor:IsValid() then
-                gs:FinishSpawningActor(actor, transform)
-                fires[#fires + 1] = { actor = actor, dieAt = os.clock() + FIRE_SECONDS }
-                spawned = spawned + 1
-            end
-        end)
-        if not ok then log("FIRE spawn error: " .. tostring(err)) end
+    for _, ring in ipairs(RINGS) do
+        for i = 1, ring.count do
+            -- even spacing + jitter reads organic instead of clock-face
+            local ang = (i / ring.count) * 2 * math.pi + (math.random() - 0.5)
+            local dist = ring.distMin + math.random() * (ring.distMax - ring.distMin)
+            local life = ring.lifeMin + math.random() * (ring.lifeMax - ring.lifeMin)
+            local transform = {
+                Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
+                Translation = { X = x + math.cos(ang) * dist, Y = y + math.sin(ang) * dist, Z = z },
+                Scale3D = { X = 1, Y = 1, Z = 1 },
+            }
+            local ok, err = pcall(function()
+                local actor = gs:BeginDeferredActorSpawnFromClass(world, fireClass, transform, 1, nil)
+                if actor and actor:IsValid() then
+                    gs:FinishSpawningActor(actor, transform)
+                    fires[#fires + 1] = { actor = actor, dieAt = os.clock() + life }
+                    spawned = spawned + 1
+                end
+            end)
+            if not ok then log("FIRE spawn error: " .. tostring(err)) end
+        end
     end
     log(string.format("FIRE: %d patches burning at %.0f %.0f %.0f", spawned, x, y, z))
 end
