@@ -48,10 +48,10 @@ local function spawnGroundFire(x, y, z)
                 Scale3D = { X = ring.scale, Y = ring.scale, Z = ring.scale },
             }
             local ok, err = pcall(function()
-                -- UE 5.5: 6th param = ESpawnActorScaleMethod (1 = MultiplyWithRoot)
+                -- UE 5.5: both spawn calls take ESpawnActorScaleMethod (1 = MultiplyWithRoot)
                 local actor = gs:BeginDeferredActorSpawnFromClass(world, fireClass, transform, 1, nil, 1)
                 if actor and actor:IsValid() then
-                    gs:FinishSpawningActor(actor, transform)
+                    gs:FinishSpawningActor(actor, transform, 1)
                     fires[#fires + 1] = { actor = actor, dieAt = os.clock() + life }
                     spawned = spawned + 1
                 end
@@ -132,15 +132,16 @@ end)
 -- F7: prototype-registration oracle — try to conjure molotovs directly.
 RegisterKeyBind(Key.F7, function()
     ExecuteInGameThread(function()
-        local pc = UEHelpers.GetPlayerController()
-        if not (pc and pc:IsValid()) then log("F7: no player controller") return end
+        local ksl = StaticFindObject("/Script/Engine.Default__KismetSystemLibrary")
+        local world = UEHelpers.GetWorld()
+        if not (ksl and ksl:IsValid() and world and world:IsValid()) then log("F7: no KSL/world") return end
         for _, cmd in ipairs({
             "XSpawnItemNearPlayer Vodka 1",
             "XSpawnItemNearPlayer GrenadeMolotov 3",
             "XCreateItemInInventory Vodka 1",
             "XCreateItemInInventory GrenadeMolotov 3",
         }) do
-            local ok, err = pcall(function() pc:ConsoleCommand(cmd, false) end)
+            local ok, err = pcall(function() ksl:ExecuteConsoleCommand(world, cmd, nil) end)
             log("F7 sent: " .. cmd .. (ok and "" or (" ERR " .. tostring(err))))
         end
     end)
