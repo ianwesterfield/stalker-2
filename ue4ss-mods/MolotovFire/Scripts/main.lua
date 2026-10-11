@@ -21,11 +21,24 @@ LoopAsync(100, function()
                 local ok = pcall(function()
                     if t.actor:IsValid() then
                         local loc = t.actor:K2_GetActorLocation()
-                        t.x, t.y, t.z = loc.X, loc.Y, loc.Z
+                        if (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
+                            local root = t.actor.RootComponent
+                            if root and root:IsValid() then
+                                loc = root:K2_GetComponentLocation()
+                            end
+                        end
+                        -- grenade parks at origin while equipped; only record real positions
+                        if not (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
+                            t.x, t.y, t.z = loc.X, loc.Y, loc.Z
+                            t.seen = (t.seen or 0) + 1
+                            if t.seen % 10 == 1 then
+                                log(string.format("tracking %.0f %.0f %.0f", t.x, t.y, t.z))
+                            end
+                        end
                     else
                         t.alive = false
                         trackedCount = trackedCount - 1
-                        log(string.format("DETONATION at %.0f %.0f %.0f", t.x, t.y, t.z))
+                        log(string.format("DETONATION at %.0f %.0f %.0f (reads=%d)", t.x, t.y, t.z, t.seen or 0))
                     end
                 end)
                 if not ok and t.alive then
