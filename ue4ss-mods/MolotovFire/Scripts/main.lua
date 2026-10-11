@@ -7,11 +7,12 @@ local UEHelpers = require("UEHelpers")
 local FIRE_CLASS_PATH = "/Game/GameLite/Blueprints/Anomalies/BP_ClassicFireAnomaly.BP_ClassicFireAnomaly_C"
 
 -- One throw = staggered pattern: fire guts out from the edges inward.
--- { count, min/max distance (cm), min/max lifetime (s) }
+-- Burner anomalies take seconds to reach full blaze — short lives read faint.
+-- { count, min/max distance (cm), min/max lifetime (s), visual scale }
 local RINGS = {
-    { count = 1, distMin = 0,   distMax = 0,   lifeMin = 30, lifeMax = 40 },  -- heart of the fire
-    { count = 4, distMin = 180, distMax = 300, lifeMin = 22, lifeMax = 32 },  -- inner ring
-    { count = 5, distMin = 400, distMax = 580, lifeMin = 14, lifeMax = 22 },  -- outer splash
+    { count = 1, distMin = 0,   distMax = 0,   lifeMin = 85, lifeMax = 100, scale = 1.4 },  -- heart of the fire
+    { count = 4, distMin = 180, distMax = 300, lifeMin = 70, lifeMax = 85,  scale = 1.2 },  -- inner ring
+    { count = 5, distMin = 400, distMax = 580, lifeMin = 55, lifeMax = 70,  scale = 1.0 },  -- outer splash
 }
 
 -- Track live grenades; a vanished actor's last position = detonation site.
@@ -43,7 +44,7 @@ local function spawnGroundFire(x, y, z)
             local life = ring.lifeMin + math.random() * (ring.lifeMax - ring.lifeMin)
             local transform = {
                 Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
-                Translation = { X = x + math.cos(ang) * dist, Y = y + math.sin(ang) * dist, Z = z },
+                Translation = { ring.scale, Y = ring.scale, Z = ring.scales(ang) * dist, Y = y + math.sin(ang) * dist, Z = z },
                 Scale3D = { X = 1, Y = 1, Z = 1 },
             }
             local ok, err = pcall(function()
