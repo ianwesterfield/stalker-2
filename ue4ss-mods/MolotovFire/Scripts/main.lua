@@ -135,7 +135,9 @@ RegisterKeyBind(Key.F7, function()
         local pc = UEHelpers.GetPlayerController()
         if not (pc and pc:IsValid()) then log("F7: no player controller") return end
         for _, cmd in ipairs({
+            "XSpawnItemNearPlayer Vodka 1",
             "XSpawnItemNearPlayer GrenadeMolotov 3",
+            "XCreateItemInInventory Vodka 1",
             "XCreateItemInInventory GrenadeMolotov 3",
         }) do
             local ok, err = pcall(function() pc:ConsoleCommand(cmd, false) end)
