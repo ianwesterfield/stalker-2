@@ -1,0 +1,9 @@
+# Bulk extracts/decodes of original game data — regenerate from the game files
+extracted/
+
+# Packed output staging (final .pak is reproducible from mod/ + scripts/)
+build/
+
+__pycache__/
+*.bak
+Thumbs.db
