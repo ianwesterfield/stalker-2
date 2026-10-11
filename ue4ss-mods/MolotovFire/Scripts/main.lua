@@ -48,7 +48,8 @@ local function spawnGroundFire(x, y, z)
                 Scale3D = { X = ring.scale, Y = ring.scale, Z = ring.scale },
             }
             local ok, err = pcall(function()
-                local actor = gs:BeginDeferredActorSpawnFromClass(world, fireClass, transform, 1, nil)
+                -- UE 5.5: 6th param = ESpawnActorScaleMethod (1 = MultiplyWithRoot)
+                local actor = gs:BeginDeferredActorSpawnFromClass(world, fireClass, transform, 1, nil, 1)
                 if actor and actor:IsValid() then
                     gs:FinishSpawningActor(actor, transform)
                     fires[#fires + 1] = { actor = actor, dieAt = os.clock() + life }
