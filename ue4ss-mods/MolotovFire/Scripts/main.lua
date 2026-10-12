@@ -23,6 +23,28 @@ local tracked = {}
 local trackedCount = 0
 local fires = {}                 -- { actor, dieAt }
 
+local Z_NUDGE = -30   -- BonFire flames emit from log-pile top; sink actor to grass level
+
+local function groundZ(world, x, y, zHint)
+    local ksl = StaticFindObject("/Script/Engine.Default__KismetSystemLibrary")
+    if not (ksl and ksl:IsValid()) then return zHint end
+    local hit = {}
+    local ok, hitSomething = pcall(function()
+        -- trace Visibility channel: +150 clears tall grass, -1500 reaches downslope
+        return ksl:LineTraceSingle(world,
+            { X = x, Y = y, Z = zHint + 150 },
+            { X = x, Y = y, Z = zHint - 1500 },
+            0, false, {}, 0, hit, true,
+            { R = 0, G = 0, B = 0, A = 1 }, { R = 0, G = 0, B = 0, A = 1 }, 0.0)
+    end)
+    if ok and hitSomething then
+        local p = hit.ImpactPoint or hit.Location
+        local okZ, zv = pcall(function() return p.Z end)
+        if okZ and type(zv) == "number" then return zv end
+    end
+    return zHint
+end
+
 local function spawnGroundFire(x, y, z)
     if not SPAWN_ARMED then
         log(string.format("FIRE (disarmed): would burn at %.0f %.0f %.0f", x, y, z))
@@ -49,9 +71,12 @@ local function spawnGroundFire(x, y, z)
             local ang = (i / ring.count) * 2 * math.pi + (math.random() - 0.5)
             local dist = ring.distMin + math.random() * (ring.distMax - ring.distMin)
             local life = ring.lifeMin + math.random() * (ring.lifeMax - ring.lifeMin)
+            local px = x + math.cos(ang) * dist
+            local py = y + math.sin(ang) * dist
+            local pz = groundZ(world, px, py, z) + Z_NUDGE
             local transform = {
                 Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
-                Translation = { X = x + math.cos(ang) * dist, Y = y + math.sin(ang) * dist, Z = z },
+                Translation = { X = px, Y = py, Z = pz },
                 Scale3D = { X = ring.scale, Y = ring.scale, Z = ring.scale },
             }
             local ok, err = pcall(function()
