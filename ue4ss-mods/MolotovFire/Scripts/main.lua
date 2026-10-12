@@ -245,15 +245,43 @@ end)
 local FP_ANIM_PATH = "/Game/_STALKER2/Animations/Weapons/grenades/RGD5/AnimBP_Rgd5_fp.AnimBP_Rgd5_fp_C"
 local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 
--- relative to the hidden grenade mesh root; F8 cycles these live
+-- offsets in the grenade-bone frame; F11 cycles these live (F8 = game quickload!)
 local BOTTLE_TUNES = {
-    { s = 0.55, x = 0, y = 0, z = -8 },
-    { s = 0.45, x = 0, y = 0, z = -6 },
-    { s = 0.65, x = 0, y = 0, z = -10 },
-    { s = 0.40, x = 0, y = 0, z = -4 },
-    { s = 1.00, x = 0, y = 0, z = 0 },
+    { s = 0.45, x = 0, y = 0, z = -10 },
+    { s = 0.45, x = 0, y = 0, z = 0 },
+    { s = 0.45, x = 0, y = 0, z = -18 },
+    { s = 0.45, x = 6, y = 0, z = -10 },
+    { s = 0.45, x = 0, y = 6, z = -10 },
+    { s = 0.45, x = 0, y = -6, z = -10 },
 }
 local bottleTuneIdx = 1
+
+-- the FP anim moves the grenade's BONES into the hand; comp root stays put
+local function pickGrenadeBone(mesh)
+    local names = {}
+    pcall(function()
+        local arr = mesh:GetAllSocketNames()
+        for i = 1, #arr do
+            local nm = arr[i]
+            names[#names + 1] = tostring(nm and nm.ToString and nm:ToString() or nm)
+        end
+    end)
+    if #names == 0 then
+        pcall(function()
+            local n = mesh:GetNumBones()
+            for i = 0, math.min(n - 1, 15) do
+                local nm = mesh:GetBoneName(i)
+                names[#names + 1] = tostring(nm and nm.ToString and nm:ToString() or nm)
+            end
+        end)
+    end
+    log("FP sockets/bones: " .. (#names > 0 and table.concat(names, ", ") or "(none found)"))
+    for _, nm in ipairs(names) do
+        local l = nm:lower()
+        if l:find("gre") or l:find("body") or l:find("item") or l:find("wpn") then return nm end
+    end
+    return names[#names]   -- leaf bone of a tiny rig = the item itself; nil -> root
+end
 
 local function applyBottleTune()
     local t = BOTTLE_TUNES[bottleTuneIdx]
@@ -321,11 +349,12 @@ NotifyOnNewObject(FP_ANIM_PATH, function(anim)
                 if not (comp and comp:IsValid()) then log("FP: AddComponentByClass failed") return end
                 comp:SetStaticMesh(bottle)
                 comp:SetCollisionEnabled(0)
-                comp:K2_AttachToComponent(mesh, FName("None"), 2, 2, 0, false)   -- snap to comp root
+                local bone = pickGrenadeBone(mesh)
+                comp:K2_AttachToComponent(mesh, FName(bone or "None"), 2, 2, 0, false)
                 mesh:SetVisibility(false, false)   -- hide grenade; child bottle stays visible
                 fp.bottle, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 applyBottleTune()
-                log("FP: bottle in hand")
+                log("FP: bottle in hand (bone " .. tostring(bone) .. ")")
             end)
             if not ok then log("FP swap ERR: " .. tostring(err)) end
         end)
@@ -384,13 +413,13 @@ RegisterKeyBind(Key.F7, function()
     end)
 end)
 
--- F8: cycle bottle size/position presets on the live bottle
-RegisterKeyBind(Key.F8, function()
+-- F11: cycle bottle offset presets on the live bottle (F8 belongs to quickload)
+RegisterKeyBind(Key.F11, function()
     ExecuteInGameThread(function()
         bottleTuneIdx = bottleTuneIdx % #BOTTLE_TUNES + 1
         local t = BOTTLE_TUNES[bottleTuneIdx]
         applyBottleTune()
-        log(string.format("F8 bottle tune %d/%d: scale %.2f offset %g %g %g",
+        log(string.format("F11 bottle tune %d/%d: scale %.2f offset %g %g %g",
             bottleTuneIdx, #BOTTLE_TUNES, t.s, t.x, t.y, t.z))
     end)
 end)
