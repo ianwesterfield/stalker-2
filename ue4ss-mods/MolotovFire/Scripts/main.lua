@@ -9,14 +9,15 @@ local UEHelpers = require("UEHelpers")
 local FIRE_CLASS_PATH = "/Game/_Stalker_2/VFX/Environment/BonFire/Blueprint/BP_BonFire.BP_BonFire_C"
 local SPAWN_ARMED = true
 
--- One throw = one burning patch: flame clusters are ~80cm wide, so centers pack
--- tighter than that and the pool smears along the throw direction like spilled fuel.
+-- Real petrol-bomb pool: intense ~25s, rim dies first, heart gone by ~45s.
 -- { count, min/max distance (cm), min/max lifetime (s), visual scale }
 local RINGS = {
-    { count = 1, distMin = 0,  distMax = 0,   lifeMin = 85, lifeMax = 100, scale = 1.4 },  -- heart of the fire
-    { count = 4, distMin = 35, distMax = 65,  lifeMin = 70, lifeMax = 85,  scale = 1.2 },  -- body
-    { count = 5, distMin = 70, distMax = 110, lifeMin = 55, lifeMax = 70,  scale = 1.0 },  -- ragged edge
+    { count = 1, distMin = 0,  distMax = 0,   lifeMin = 40, lifeMax = 45, scale = 1.4 },  -- heart of the fire
+    { count = 4, distMin = 35, distMax = 65,  lifeMin = 32, lifeMax = 40, scale = 1.2 },  -- body
+    { count = 5, distMin = 70, distMax = 110, lifeMin = 24, lifeMax = 32, scale = 1.0 },  -- ragged edge
 }
+
+local FLASH_NS_PATH = "/Game/_Stalker_2/VFX/Explosions/Niagara/NS_Barrel_Explo.NS_Barrel_Explo"
 
 -- Track live grenades; a vanished actor's last position = detonation site.
 local tracked = {}
@@ -69,6 +70,19 @@ local function spawnGroundFire(x, y, z, hx, hy)
         log("FIRE: no GameplayStatics/world")
         return
     end
+    -- flattened wide one-shot of the explosion fireball = horizontal flame wash
+    -- while the bonfire patches ramp up
+    pcall(function()
+        local ns = StaticFindObject(FLASH_NS_PATH) or LoadAsset(FLASH_NS_PATH)
+        local nfl = StaticFindObject("/Script/Niagara.Default__NiagaraFunctionLibrary")
+        if ns and ns:IsValid() and nfl and nfl:IsValid() then
+            nfl:SpawnSystemAtLocation(world, ns,
+                { X = x, Y = y, Z = groundZ(world, x, y, z) + 25 },
+                { Pitch = 0, Yaw = 0, Roll = 0 },
+                { X = 2.5, Y = 2.5, Z = 0.5 },
+                true, true, 0, true)
+        end
+    end)
     local spawned = 0
     for _, ring in ipairs(RINGS) do
         for i = 1, ring.count do
