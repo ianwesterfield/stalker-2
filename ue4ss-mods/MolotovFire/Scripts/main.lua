@@ -4,11 +4,10 @@ log("loaded")
 
 local UEHelpers = require("UEHelpers")
 
-local FIRE_CLASS_PATH = "/Game/GameLite/Blueprints/Anomalies/BP_ClassicFireAnomaly.BP_ClassicFireAnomaly_C"
-
--- DISARMED: raw-spawned ClassicFireAnomaly null-derefs in its init (needs the
--- anomaly-spawner context). Re-arm after the object dump shows what to set.
-local SPAWN_ARMED = false
+-- Ambient bonfire BP (env set-dressing): self-contained VFX+light, no anomaly-spawner
+-- context needed. ClassicFireAnomaly null-derefs when raw-spawned — don't go back.
+local FIRE_CLASS_PATH = "/Game/_Stalker_2/VFX/Environment/BonFire/Blueprint/BP_BonFire.BP_BonFire_C"
+local SPAWN_ARMED = true
 
 -- One throw = staggered pattern: fire guts out from the edges inward.
 -- Burner anomalies take seconds to reach full blaze — short lives read faint.
@@ -143,11 +142,10 @@ RegisterKeyBind(Key.F7, function()
         local ksl = StaticFindObject("/Script/Engine.Default__KismetSystemLibrary")
         local world = UEHelpers.GetWorld()
         if not (ksl and ksl:IsValid() and world and world:IsValid()) then log("F7: no KSL/world") return end
+        -- real verbs from object dump; XCreateItemInInventoryByID args = SID ObjUID Count Durability
         for _, cmd in ipairs({
-            "XSpawnItemNearPlayer Vodka 1",
-            "XSpawnItemNearPlayer GrenadeMolotov 3",
-            "XCreateItemInInventory Vodka 1",
-            "XCreateItemInInventory GrenadeMolotov 3",
+            "XSpawnItemNearPlayerBySID Vodka",
+            "XCreateItemInInventoryByID GrenadeMolotov 0 3 1",
         }) do
             local ok, err = pcall(function() ksl:ExecuteConsoleCommand(world, cmd, nil) end)
             log("F7 sent: " .. cmd .. (ok and "" or (" ERR " .. tostring(err))))
