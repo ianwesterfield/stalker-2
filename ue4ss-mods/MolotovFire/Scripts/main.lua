@@ -138,14 +138,42 @@ NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", 
         ExecuteInGameThread(function()
             local ok, err = pcall(function()
                 if not (grenade and grenade:IsValid()) then log("bottleize: actor gone") return end
+                -- gate: don't bottleize real RGD5/F1 grenades
+                local sid = "unreadable"
+                pcall(function()
+                    local gec = grenade.GrenadeExplosionComponent
+                    if gec and gec:IsValid() then
+                        local v = gec.ExplosionPrototypeSID
+                        sid = tostring(v and v.ToString and v:ToString() or v)
+                    end
+                end)
+                log("bottleize: explosion SID = " .. sid)
+                if not (sid:find("Molotov") or sid == "unreadable") then
+                    log("bottleize: not a molotov, skipping")
+                    return
+                end
                 local mesh = StaticFindObject(BOTTLE_MESH_PATH) or LoadAsset(BOTTLE_MESH_PATH)
                 if not (mesh and mesh:IsValid()) then log("bottleize: mesh load failed") return end
                 local smc = grenade.StaticMeshComponent
                 if smc and smc:IsValid() then
                     smc:SetStaticMesh(mesh)
                     log("bottleize: swapped")
-                else
-                    log("bottleize: no StaticMeshComponent")
+                end
+                -- recon: find the FP-hands component still drawing an RGD during idle
+                for _, cls in ipairs({ "SkeletalMeshComponent", "StaticMeshComponent" }) do
+                    for _, c in ipairs(FindAllOf(cls) or {}) do
+                        pcall(function()
+                            local m
+                            if cls == "StaticMeshComponent" then m = c.StaticMesh
+                            else m = c.SkeletalMeshAsset or c.SkeletalMesh end
+                            if m and m:IsValid() then
+                                local mn = m:GetFName():ToString():lower()
+                                if mn:find("rgd") or mn:find("grenade") then
+                                    log("FP recon: " .. cls .. " " .. c:GetFullName())
+                                end
+                            end
+                        end)
+                    end
                 end
             end)
             if not ok then log("bottleize ERR: " .. tostring(err)) end
