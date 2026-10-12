@@ -9,13 +9,13 @@ local UEHelpers = require("UEHelpers")
 local FIRE_CLASS_PATH = "/Game/_Stalker_2/VFX/Environment/BonFire/Blueprint/BP_BonFire.BP_BonFire_C"
 local SPAWN_ARMED = true
 
--- One throw = one burning pool, ~10ft across: patches overlap into a single blaze.
--- Burner anomalies take seconds to reach full blaze — short lives read faint.
+-- One throw = one burning patch: flame clusters are ~80cm wide, so centers pack
+-- tighter than that and the pool smears along the throw direction like spilled fuel.
 -- { count, min/max distance (cm), min/max lifetime (s), visual scale }
 local RINGS = {
-    { count = 1, distMin = 0,   distMax = 0,   lifeMin = 85, lifeMax = 100, scale = 1.4 },  -- heart of the fire
-    { count = 4, distMin = 50,  distMax = 95,  lifeMin = 70, lifeMax = 85,  scale = 1.2 },  -- inner ring
-    { count = 5, distMin = 100, distMax = 150, lifeMin = 55, lifeMax = 70,  scale = 1.0 },  -- splash edge
+    { count = 1, distMin = 0,  distMax = 0,   lifeMin = 85, lifeMax = 100, scale = 1.4 },  -- heart of the fire
+    { count = 4, distMin = 35, distMax = 65,  lifeMin = 70, lifeMax = 85,  scale = 1.2 },  -- body
+    { count = 5, distMin = 70, distMax = 110, lifeMin = 55, lifeMax = 70,  scale = 1.0 },  -- ragged edge
 }
 
 -- Track live grenades; a vanished actor's last position = detonation site.
@@ -45,10 +45,15 @@ local function groundZ(world, x, y, zHint)
     return zHint
 end
 
-local function spawnGroundFire(x, y, z)
+local function spawnGroundFire(x, y, z, hx, hy)
     if not SPAWN_ARMED then
         log(string.format("FIRE (disarmed): would burn at %.0f %.0f %.0f", x, y, z))
         return
+    end
+    -- splash axis = throw heading (random for F6); pool stretches 1.5x along, 0.8x across
+    if not (hx and hy) or (hx == 0 and hy == 0) then
+        local a = math.random() * 2 * math.pi
+        hx, hy = math.cos(a), math.sin(a)
     end
     local fireClass = StaticFindObject(FIRE_CLASS_PATH)
     if not (fireClass and fireClass:IsValid()) then
@@ -71,8 +76,11 @@ local function spawnGroundFire(x, y, z)
             local ang = (i / ring.count) * 2 * math.pi + (math.random() - 0.5)
             local dist = ring.distMin + math.random() * (ring.distMax - ring.distMin)
             local life = ring.lifeMin + math.random() * (ring.lifeMax - ring.lifeMin)
-            local px = x + math.cos(ang) * dist
-            local py = y + math.sin(ang) * dist
+            -- decompose offset into along/across the splash axis, then stretch
+            local a = math.cos(ang) * dist * 1.5 + 30   -- +30: splash carries past impact
+            local b = math.sin(ang) * dist * 0.8
+            local px = x + hx * a - hy * b
+            local py = y + hy * a + hx * b
             local pz = groundZ(world, px, py, z) + Z_NUDGE
             local transform = {
                 Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
@@ -136,7 +144,7 @@ LoopAsync(100, function()
                         t.alive = false
                         trackedCount = trackedCount - 1
                         log(string.format("BOOM (fuse) at %.0f %.0f %.0f", t.x, t.y, t.z))
-                        local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z)
+                        local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z, t.hx, t.hy)
                         if not okF then log("FIRE handler error: " .. tostring(errF)) end
                         return
                     end
@@ -149,10 +157,15 @@ LoopAsync(100, function()
                             end
                         end
                         if not (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
-                            -- >120cm between 100ms reads = 12 m/s: throws hit ~15-25, sprint ~7
-                            if t.seen > 0 and not t.armed then
+                            if t.seen > 0 then
                                 local dx, dy, dz = loc.X - t.x, loc.Y - t.y, loc.Z - t.z
-                                if dx * dx + dy * dy + dz * dz > 120 * 120 then
+                                local h2 = dx * dx + dy * dy
+                                if h2 > 60 * 60 then
+                                    local h = math.sqrt(h2)
+                                    t.hx, t.hy = dx / h, dy / h   -- latest flight heading
+                                end
+                                -- >120cm between 100ms reads = 12 m/s: throws hit ~15-25, sprint ~7
+                                if not t.armed and h2 + dz * dz > 120 * 120 then
                                     t.armed = true
                                     t.boomAt = os.clock() + 1.25   -- TimeToExplode=1.2f from release
                                     log("thrown - fuse lit")
@@ -170,7 +183,7 @@ LoopAsync(100, function()
                         if t.armed then
                             -- died mid-fuse = engine detonated it; last position is ground zero
                             log(string.format("BOOM (actor died) at %.0f %.0f %.0f", t.x, t.y, t.z))
-                            local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z)
+                            local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z, t.hx, t.hy)
                             if not okF then log("FIRE handler error: " .. tostring(errF)) end
                         else
                             log(string.format("grenade despawned unarmed (reads=%d)", t.seen or 0))
