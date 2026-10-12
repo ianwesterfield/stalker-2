@@ -6,6 +6,10 @@ local UEHelpers = require("UEHelpers")
 
 local FIRE_CLASS_PATH = "/Game/GameLite/Blueprints/Anomalies/BP_ClassicFireAnomaly.BP_ClassicFireAnomaly_C"
 
+-- DISARMED: raw-spawned ClassicFireAnomaly null-derefs in its init (needs the
+-- anomaly-spawner context). Re-arm after the object dump shows what to set.
+local SPAWN_ARMED = false
+
 -- One throw = staggered pattern: fire guts out from the edges inward.
 -- Burner anomalies take seconds to reach full blaze — short lives read faint.
 -- { count, min/max distance (cm), min/max lifetime (s), visual scale }
@@ -21,6 +25,10 @@ local trackedCount = 0
 local fires = {}                 -- { actor, dieAt }
 
 local function spawnGroundFire(x, y, z)
+    if not SPAWN_ARMED then
+        log(string.format("FIRE (disarmed): would burn at %.0f %.0f %.0f", x, y, z))
+        return
+    end
     local fireClass = StaticFindObject(FIRE_CLASS_PATH)
     if not (fireClass and fireClass:IsValid()) then
         fireClass = LoadAsset(FIRE_CLASS_PATH)
