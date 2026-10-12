@@ -267,6 +267,20 @@ RegisterKeyBind(Key.F7, function()
     end)
 end)
 
+-- F9: object dump without the CTRL+O GUI (no PDA conflict, no focus juggling)
+RegisterKeyBind(Key.F9, function()
+    log("F9 object dump starting (game will hitch)")
+    local ok, err = pcall(function()
+        if type(DumpAllObjects) == "function" then
+            DumpAllObjects()
+            log("F9 dump complete -> ue4ss/UE4SS_ObjectDump.txt")
+        else
+            log("F9: DumpAllObjects not exposed in this UE4SS build")
+        end
+    end)
+    if not ok then log("F9 dump ERR: " .. tostring(err)) end
+end)
+
 -- F6: probe/load the fire class without needing a throw.
 RegisterKeyBind(Key.F6, function()
     ExecuteInGameThread(function()
