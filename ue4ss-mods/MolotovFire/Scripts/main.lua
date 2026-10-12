@@ -59,6 +59,14 @@ local function spawnGroundFire(x, y, z)
                 local actor = gs:BeginDeferredActorSpawnFromClass(world, fireClass, transform, 1, nil, 1)
                 if actor and actor:IsValid() then
                     gs:FinishSpawningActor(actor, transform, 1)
+                    -- keep flames/light/sound/BurnTriggerCollider; ditch the log-pile mesh
+                    pcall(function()
+                        local logs = actor.SM_vil_fire_death_01
+                        if logs and logs:IsValid() then
+                            logs:SetHiddenInGame(true, false)
+                            logs:SetCollisionEnabled(0)
+                        end
+                    end)
                     fires[#fires + 1] = { actor = actor, dieAt = os.clock() + life }
                     spawned = spawned + 1
                 end
