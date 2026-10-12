@@ -159,22 +159,8 @@ NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", 
                     smc:SetStaticMesh(mesh)
                     log("bottleize: swapped")
                 end
-                -- recon: find the FP-hands component still drawing an RGD during idle
-                for _, cls in ipairs({ "SkeletalMeshComponent", "StaticMeshComponent" }) do
-                    for _, c in ipairs(FindAllOf(cls) or {}) do
-                        pcall(function()
-                            local m
-                            if cls == "StaticMeshComponent" then m = c.StaticMesh
-                            else m = c.SkeletalMeshAsset or c.SkeletalMesh end
-                            if m and m:IsValid() then
-                                local mn = m:GetFName():ToString():lower()
-                                if mn:find("rgd") or mn:find("grenade") then
-                                    log("FP recon: " .. cls .. " " .. c:GetFullName())
-                                end
-                            end
-                        end)
-                    end
-                end
+                -- NO live component sweeps here: FindAllOf over world mesh comps
+                -- caused a native AV (uncatchable). FP-hands hunt moved to offline dumps.
             end)
             if not ok then log("bottleize ERR: " .. tostring(err)) end
         end)
