@@ -106,6 +106,15 @@ LoopAsync(100, function()
         for _, t in ipairs(tracked) do
             if t.alive then
                 local ok = pcall(function()
+                    -- fuse timer beats GC: actors linger ~1min after the boom
+                    if t.armed and os.clock() >= t.boomAt then
+                        t.alive = false
+                        trackedCount = trackedCount - 1
+                        log(string.format("BOOM (fuse) at %.0f %.0f %.0f", t.x, t.y, t.z))
+                        local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z)
+                        if not okF then log("FIRE handler error: " .. tostring(errF)) end
+                        return
+                    end
                     if t.actor:IsValid() then
                         local loc = t.actor:K2_GetActorLocation()
                         if (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
@@ -114,8 +123,16 @@ LoopAsync(100, function()
                                 loc = root:K2_GetComponentLocation()
                             end
                         end
-                        -- grenade parks at origin while equipped; only record real positions
                         if not (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
+                            -- >120cm between 100ms reads = 12 m/s: throws hit ~15-25, sprint ~7
+                            if t.seen > 0 and not t.armed then
+                                local dx, dy, dz = loc.X - t.x, loc.Y - t.y, loc.Z - t.z
+                                if dx * dx + dy * dy + dz * dz > 120 * 120 then
+                                    t.armed = true
+                                    t.boomAt = os.clock() + 1.25   -- TimeToExplode=1.2f from release
+                                    log("thrown - fuse lit")
+                                end
+                            end
                             t.x, t.y, t.z = loc.X, loc.Y, loc.Z
                             t.seen = (t.seen or 0) + 1
                             if t.seen % 10 == 1 then
@@ -125,18 +142,20 @@ LoopAsync(100, function()
                     else
                         t.alive = false
                         trackedCount = trackedCount - 1
-                        log(string.format("DETONATION at %.0f %.0f %.0f (reads=%d)", t.x, t.y, t.z, t.seen or 0))
-                        -- seen>=2 = it actually flew; equip-cycling despawns have zero reads
-                        if (t.seen or 0) >= 2 then
+                        if t.armed then
+                            -- died mid-fuse = engine detonated it; last position is ground zero
+                            log(string.format("BOOM (actor died) at %.0f %.0f %.0f", t.x, t.y, t.z))
                             local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z)
                             if not okF then log("FIRE handler error: " .. tostring(errF)) end
+                        else
+                            log(string.format("grenade despawned unarmed (reads=%d)", t.seen or 0))
                         end
                     end
                 end)
                 if not ok and t.alive then
                     t.alive = false
                     trackedCount = trackedCount - 1
-                    log(string.format("DETONATION (err path) at %.0f %.0f %.0f", t.x, t.y, t.z))
+                    log("tracker error; entry dropped")
                 end
             end
         end

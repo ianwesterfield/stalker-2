@@ -9,12 +9,12 @@ $looseSrc = Join-Path $ModDir "Stalker2\Content\GameLite\GameData\ItemGeneratorP
 $looseDst = Join-Path $GameDir "Stalker2\Content\GameLite\GameData\ItemGeneratorPrototypes"
 
 if ($Remove) {
-    if (Test-Path $target) { Remove-Item $target; Write-Host "Removed $target" }
-    Get-ChildItem $looseSrc -Filter *.cfg -ErrorAction SilentlyContinue | ForEach-Object {
-        $f = Join-Path $looseDst $_.Name
-        if (Test-Path $f) { Remove-Item $f; Write-Host "Removed loose $f" }
-    }
-    return
+  if (Test-Path $target) { Remove-Item $target; Write-Host "Removed $target" }
+  Get-ChildItem $looseSrc -Filter *.cfg -ErrorAction SilentlyContinue | ForEach-Object {
+    $f = Join-Path $looseDst $_.Name
+    if (Test-Path $f) { Remove-Item $f; Write-Host "Removed loose $f" }
+  }
+  return
 }
 
 if (-not (Test-Path $ModPak)) { throw "Run pack-mod.ps1 first" }
@@ -24,6 +24,6 @@ Write-Host "Deployed -> $target"
 
 New-Item -ItemType Directory -Force -Path $looseDst | Out-Null
 Get-ChildItem $looseSrc -Filter *.cfg | ForEach-Object {
-    Copy-Item $_.FullName $looseDst -Force
-    Write-Host "Deployed loose -> $looseDst\$($_.Name)"
+  Copy-Item $_.FullName $looseDst -Force
+  Write-Host "Deployed loose -> $looseDst\$($_.Name)"
 }
