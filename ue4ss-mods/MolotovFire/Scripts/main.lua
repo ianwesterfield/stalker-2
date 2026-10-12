@@ -144,19 +144,34 @@ LoopAsync(100, function()
     return false
 end)
 
--- F7: prototype-registration oracle — try to conjure molotovs directly.
+-- F7: prototype-registration oracle — call the dev cheat UFunctions directly.
+local function liveInstance(className)
+    local all = FindAllOf(className)
+    if all then
+        for _, o in ipairs(all) do
+            -- skip the CDO: calling spawn helpers on it null-derefs (no world)
+            if o:IsValid() and not o:GetFullName():find("Default__") then return o end
+        end
+    end
+    return nil
+end
+
 RegisterKeyBind(Key.F7, function()
     ExecuteInGameThread(function()
-        local ksl = StaticFindObject("/Script/Engine.Default__KismetSystemLibrary")
-        local world = UEHelpers.GetWorld()
-        if not (ksl and ksl:IsValid() and world and world:IsValid()) then log("F7: no KSL/world") return end
-        -- real verbs from object dump; XCreateItemInInventoryByID args = SID ObjUID Count Durability
-        for _, cmd in ipairs({
-            "XSpawnItemNearPlayerBySID Vodka",
-            "XCreateItemInInventoryByID GrenadeMolotov 0 3 1",
-        }) do
-            local ok, err = pcall(function() ksl:ExecuteConsoleCommand(world, cmd, nil) end)
-            log("F7 sent: " .. cmd .. (ok and "" or (" ERR " .. tostring(err))))
+        log("F7 pressed")
+        local build = liveInstance("CustomConsoleManagerBuild")
+        log("CCM Build instance: " .. tostring(build ~= nil))
+        if build then
+            for _, sid in ipairs({ "Vodka", "GrenadeMolotov" }) do
+                local ok, err = pcall(function() build:XSpawnItemNearPlayerBySID(sid) end)
+                log("XSpawnItemNearPlayerBySID " .. sid .. " -> " .. (ok and "called" or tostring(err)))
+            end
+        end
+        local rk = liveInstance("CustomConsoleManagerRK")
+        log("CCM RK instance: " .. tostring(rk ~= nil))
+        if rk then
+            local ok, err = pcall(function() rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, 3, 1.0) end)
+            log("XCreateItemInInventoryByID GrenadeMolotov -> " .. (ok and "called" or tostring(err)))
         end
     end)
 end)
