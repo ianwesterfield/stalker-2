@@ -17,8 +17,6 @@ local RINGS = {
     { count = 5, distMin = 70, distMax = 110, lifeMin = 24, lifeMax = 32, scale = 1.0 },  -- ragged edge
 }
 
-local FLASH_NS_PATH = "/Game/_Stalker_2/VFX/Explosions/Niagara/NS_Barrel_Explo.NS_Barrel_Explo"
-
 -- Track live grenades; a vanished actor's last position = detonation site.
 local tracked = {}
 local trackedCount = 0
@@ -70,19 +68,8 @@ local function spawnGroundFire(x, y, z, hx, hy)
         log("FIRE: no GameplayStatics/world")
         return
     end
-    -- flattened wide one-shot of the explosion fireball = horizontal flame wash
-    -- while the bonfire patches ramp up
-    pcall(function()
-        local ns = StaticFindObject(FLASH_NS_PATH) or LoadAsset(FLASH_NS_PATH)
-        local nfl = StaticFindObject("/Script/Niagara.Default__NiagaraFunctionLibrary")
-        if ns and ns:IsValid() and nfl and nfl:IsValid() then
-            nfl:SpawnSystemAtLocation(world, ns,
-                { X = x, Y = y, Z = groundZ(world, x, y, z) + 25 },
-                { Pitch = 0, Yaw = 0, Roll = 0 },
-                { X = 2.5, Y = 2.5, Z = 0.5 },
-                true, true, 0, true)
-        end
-    end)
+    -- no extra flash here: the engine explosion (pak ExplosionPrototype) already
+    -- provides the fireball+whoosh; a second NS_Barrel_Explo read as a double boom
     local spawned = 0
     for _, ring in ipairs(RINGS) do
         for i = 1, ring.count do
