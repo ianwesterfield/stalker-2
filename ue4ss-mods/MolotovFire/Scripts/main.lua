@@ -245,9 +245,10 @@ end)
 local FP_ANIM_PATH = "/Game/_STALKER2/Animations/Weapons/grenades/RGD5/AnimBP_Rgd5_fp.AnimBP_Rgd5_fp_C"
 local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 
--- live tuner in jnt_wpn_rgd5 bone frame: Ctrl+B = axis, Ctrl+Up/Down = ±2cm
-local bottleOff = { s = 0.45, x = 0, y = 6, z = 4 }   -- user stop-point 2026-10-12
-local AXES = { "x", "y", "z" }
+-- live tuner in jnt_wpn_rgd5 bone frame: Ctrl+B = axis (incl. scale), Ctrl+Up/Down = step
+-- s=0.36: label says 0.5L (~25cm/7cm real); 0.45 measured ~25% oversized vs hand breadth
+local bottleOff = { s = 0.36, x = -8, y = -2, z = 6 }   -- user-tuned 2026-10-12
+local AXES = { "x", "y", "z", "s" }
 local axisIdx = 1
 
 -- the FP anim moves the grenade's BONES into the hand; comp root stays put
@@ -287,18 +288,21 @@ local function applyBottleTune()
 end
 
 local function logBottleOff(prefix)
-    log(string.format("%s offset %g %g %g (axis %s)",
-        prefix, bottleOff.x, bottleOff.y, bottleOff.z, AXES[axisIdx]))
+    log(string.format("%s scale %.2f offset %g %g %g (axis %s)",
+        prefix, bottleOff.s, bottleOff.x, bottleOff.y, bottleOff.z, AXES[axisIdx]))
 end
 
 local function fpRestore()
     pcall(function()
-        if fp.mesh and fp.mesh:IsValid() then fp.mesh:SetVisibility(true, false) end
+        if fp.mesh and fp.mesh:IsValid() then
+            fp.mesh:SetVisibility(true, false)
+            if fp.prevTick ~= nil then fp.mesh.VisibilityBasedAnimTickOption = fp.prevTick end
+        end
     end)
     pcall(function()
         if fp.bottle and fp.bottle:IsValid() then fp.bottle:K2_DestroyComponent(fp.bottle) end
     end)
-    fp.bottle, fp.mesh, fp.animName = nil, nil, nil
+    fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
 end
 
 local function mainHandSID()
@@ -349,6 +353,11 @@ NotifyOnNewObject(FP_ANIM_PATH, function(anim)
                 comp:SetCollisionEnabled(0)
                 local bone = pickGrenadeBone(mesh)
                 comp:K2_AttachToComponent(mesh, FName(bone or "None"), 2, 2, 0, false)
+                -- hidden skel meshes stop ticking bones by default -> bottle freezes while hands sway
+                pcall(function()
+                    fp.prevTick = mesh.VisibilityBasedAnimTickOption
+                    mesh.VisibilityBasedAnimTickOption = 0   -- AlwaysTickPoseAndRefreshBones
+                end)
                 mesh:SetVisibility(false, false)   -- hide grenade; child bottle stays visible
                 fp.bottle, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 applyBottleTune()
@@ -422,18 +431,18 @@ end)
 RegisterKeyBind(Key.UP_ARROW, { ModifierKey.CONTROL }, function()
     ExecuteInGameThread(function()
         local a = AXES[axisIdx]
-        bottleOff[a] = bottleOff[a] + 2
+        bottleOff[a] = bottleOff[a] + ((a == "s") and 0.02 or 2)
         applyBottleTune()
-        logBottleOff("nudge +2:")
+        logBottleOff("nudge +:")
     end)
 end)
 
 RegisterKeyBind(Key.DOWN_ARROW, { ModifierKey.CONTROL }, function()
     ExecuteInGameThread(function()
         local a = AXES[axisIdx]
-        bottleOff[a] = bottleOff[a] - 2
+        bottleOff[a] = bottleOff[a] - ((a == "s") and 0.02 or 2)
         applyBottleTune()
-        logBottleOff("nudge -2:")
+        logBottleOff("nudge -:")
     end)
 end)
 
