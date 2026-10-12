@@ -245,18 +245,10 @@ end)
 local FP_ANIM_PATH = "/Game/_STALKER2/Animations/Weapons/grenades/RGD5/AnimBP_Rgd5_fp.AnimBP_Rgd5_fp_C"
 local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 
--- offsets in the jnt_wpn_rgd5 bone frame; Ctrl+B cycles (F8=quickload, F11=fullscreen!)
--- preset 1 = user-approved best from 2026-10-12 tuning session
-local BOTTLE_TUNES = {
-    { s = 0.45, x = 0, y = 6, z = 0 },
-    { s = 0.45, x = 0, y = 8, z = 0 },
-    { s = 0.45, x = 0, y = 4, z = 0 },
-    { s = 0.45, x = 3, y = 6, z = 0 },
-    { s = 0.45, x = -3, y = 6, z = 0 },
-    { s = 0.45, x = 0, y = 6, z = -4 },
-    { s = 0.45, x = 0, y = 6, z = 4 },
-}
-local bottleTuneIdx = 1
+-- live tuner in jnt_wpn_rgd5 bone frame: Ctrl+B = axis, Ctrl+Up/Down = ±2cm
+local bottleOff = { s = 0.45, x = 0, y = 6, z = 4 }   -- user stop-point 2026-10-12
+local AXES = { "x", "y", "z" }
+local axisIdx = 1
 
 -- the FP anim moves the grenade's BONES into the hand; comp root stays put
 local function pickGrenadeBone(mesh)
@@ -285,13 +277,18 @@ local function pickGrenadeBone(mesh)
 end
 
 local function applyBottleTune()
-    local t = BOTTLE_TUNES[bottleTuneIdx]
     pcall(function()
         if fp.bottle and fp.bottle:IsValid() then
-            fp.bottle:SetRelativeScale3D({ X = t.s, Y = t.s, Z = t.s })
-            fp.bottle:K2_SetRelativeLocation({ X = t.x, Y = t.y, Z = t.z }, false, {}, false)
+            fp.bottle:SetRelativeScale3D({ X = bottleOff.s, Y = bottleOff.s, Z = bottleOff.s })
+            fp.bottle:K2_SetRelativeLocation(
+                { X = bottleOff.x, Y = bottleOff.y, Z = bottleOff.z }, false, {}, false)
         end
     end)
+end
+
+local function logBottleOff(prefix)
+    log(string.format("%s offset %g %g %g (axis %s)",
+        prefix, bottleOff.x, bottleOff.y, bottleOff.z, AXES[axisIdx]))
 end
 
 local function fpRestore()
@@ -414,14 +411,29 @@ RegisterKeyBind(Key.F7, function()
     end)
 end)
 
--- Ctrl+B: cycle bottle offset presets on the live bottle
+-- Ctrl+B: select nudge axis; Ctrl+Up/Down: move bottle ±2cm on it
 RegisterKeyBind(Key.B, { ModifierKey.CONTROL }, function()
     ExecuteInGameThread(function()
-        bottleTuneIdx = bottleTuneIdx % #BOTTLE_TUNES + 1
-        local t = BOTTLE_TUNES[bottleTuneIdx]
+        axisIdx = axisIdx % #AXES + 1
+        logBottleOff("Ctrl+B axis ->")
+    end)
+end)
+
+RegisterKeyBind(Key.UP_ARROW, { ModifierKey.CONTROL }, function()
+    ExecuteInGameThread(function()
+        local a = AXES[axisIdx]
+        bottleOff[a] = bottleOff[a] + 2
         applyBottleTune()
-        log(string.format("Ctrl+B bottle tune %d/%d: scale %.2f offset %g %g %g",
-            bottleTuneIdx, #BOTTLE_TUNES, t.s, t.x, t.y, t.z))
+        logBottleOff("nudge +2:")
+    end)
+end)
+
+RegisterKeyBind(Key.DOWN_ARROW, { ModifierKey.CONTROL }, function()
+    ExecuteInGameThread(function()
+        local a = AXES[axisIdx]
+        bottleOff[a] = bottleOff[a] - 2
+        applyBottleTune()
+        logBottleOff("nudge -2:")
     end)
 end)
 
