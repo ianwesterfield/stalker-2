@@ -245,14 +245,16 @@ end)
 local FP_ANIM_PATH = "/Game/_STALKER2/Animations/Weapons/grenades/RGD5/AnimBP_Rgd5_fp.AnimBP_Rgd5_fp_C"
 local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 
--- offsets in the grenade-bone frame; F11 cycles these live (F8 = game quickload!)
+-- offsets in the jnt_wpn_rgd5 bone frame; Ctrl+B cycles (F8=quickload, F11=fullscreen!)
+-- preset 1 = user-approved best from 2026-10-12 tuning session
 local BOTTLE_TUNES = {
-    { s = 0.45, x = 0, y = 0, z = 0 },
-    { s = 0.45, x = 0, y = 0, z = -6 },
-    { s = 0.45, x = 0, y = 0, z = -12 },
-    { s = 0.45, x = 0, y = 0, z = 6 },
-    { s = 0.45, x = 6, y = 0, z = 0 },
     { s = 0.45, x = 0, y = 6, z = 0 },
+    { s = 0.45, x = 0, y = 8, z = 0 },
+    { s = 0.45, x = 0, y = 4, z = 0 },
+    { s = 0.45, x = 3, y = 6, z = 0 },
+    { s = 0.45, x = -3, y = 6, z = 0 },
+    { s = 0.45, x = 0, y = 6, z = -4 },
+    { s = 0.45, x = 0, y = 6, z = 4 },
 }
 local bottleTuneIdx = 1
 
@@ -412,13 +414,13 @@ RegisterKeyBind(Key.F7, function()
     end)
 end)
 
--- F11: cycle bottle offset presets on the live bottle (F8 belongs to quickload)
-RegisterKeyBind(Key.F11, function()
+-- Ctrl+B: cycle bottle offset presets on the live bottle
+RegisterKeyBind(Key.B, { ModifierKey.CONTROL }, function()
     ExecuteInGameThread(function()
         bottleTuneIdx = bottleTuneIdx % #BOTTLE_TUNES + 1
         local t = BOTTLE_TUNES[bottleTuneIdx]
         applyBottleTune()
-        log(string.format("F11 bottle tune %d/%d: scale %.2f offset %g %g %g",
+        log(string.format("Ctrl+B bottle tune %d/%d: scale %.2f offset %g %g %g",
             bottleTuneIdx, #BOTTLE_TUNES, t.s, t.x, t.y, t.z))
     end)
 end)
