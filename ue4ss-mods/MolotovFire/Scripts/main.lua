@@ -247,32 +247,31 @@ local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 
 -- offsets in the grenade-bone frame; F11 cycles these live (F8 = game quickload!)
 local BOTTLE_TUNES = {
-    { s = 0.45, x = 0, y = 0, z = -10 },
     { s = 0.45, x = 0, y = 0, z = 0 },
-    { s = 0.45, x = 0, y = 0, z = -18 },
-    { s = 0.45, x = 6, y = 0, z = -10 },
-    { s = 0.45, x = 0, y = 6, z = -10 },
-    { s = 0.45, x = 0, y = -6, z = -10 },
+    { s = 0.45, x = 0, y = 0, z = -6 },
+    { s = 0.45, x = 0, y = 0, z = -12 },
+    { s = 0.45, x = 0, y = 0, z = 6 },
+    { s = 0.45, x = 6, y = 0, z = 0 },
+    { s = 0.45, x = 0, y = 6, z = 0 },
 }
 local bottleTuneIdx = 1
 
 -- the FP anim moves the grenade's BONES into the hand; comp root stays put
 local function pickGrenadeBone(mesh)
     local names = {}
+    local function unwrap(raw)
+        local v = raw
+        pcall(function() if raw.get then v = raw:get() end end)   -- TArray elems are RemoteUnrealParam
+        return tostring(v and v.ToString and v:ToString() or v)
+    end
     pcall(function()
         local arr = mesh:GetAllSocketNames()
-        for i = 1, #arr do
-            local nm = arr[i]
-            names[#names + 1] = tostring(nm and nm.ToString and nm:ToString() or nm)
-        end
+        for i = 1, #arr do names[#names + 1] = unwrap(arr[i]) end
     end)
     if #names == 0 then
         pcall(function()
             local n = mesh:GetNumBones()
-            for i = 0, math.min(n - 1, 15) do
-                local nm = mesh:GetBoneName(i)
-                names[#names + 1] = tostring(nm and nm.ToString and nm:ToString() or nm)
-            end
+            for i = 0, math.min(n - 1, 15) do names[#names + 1] = unwrap(mesh:GetBoneName(i)) end
         end)
     end
     log("FP sockets/bones: " .. (#names > 0 and table.concat(names, ", ") or "(none found)"))
