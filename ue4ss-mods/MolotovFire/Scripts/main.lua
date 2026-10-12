@@ -138,18 +138,23 @@ NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", 
         ExecuteInGameThread(function()
             local ok, err = pcall(function()
                 if not (grenade and grenade:IsValid()) then log("bottleize: actor gone") return end
-                -- gate: don't bottleize real RGD5/F1 grenades
+                -- gate: native Grenade.SID (dump: plain StrProperty) names the prototype
                 local sid = "unreadable"
                 pcall(function()
-                    local gec = grenade.GrenadeExplosionComponent
-                    if gec and gec:IsValid() then
-                        local v = gec.ExplosionPrototypeSID
-                        sid = tostring(v and v.ToString and v:ToString() or v)
-                    end
+                    local v = grenade.SID
+                    local s = tostring(v and v.ToString and v:ToString() or v)
+                    if s ~= "" and s ~= "nil" then sid = s end
                 end)
-                log("bottleize: explosion SID = " .. sid)
+                log("bottleize: SID = " .. sid)
                 if not (sid:find("Molotov") or sid == "unreadable") then
                     log("bottleize: not a molotov, skipping")
+                    for _, t in ipairs(tracked) do
+                        if t.alive and rawequal(t.actor, grenade) then
+                            t.alive = false
+                            trackedCount = trackedCount - 1
+                            log("untracked non-molotov (no fire for RGD5/F1)")
+                        end
+                    end
                     return
                 end
                 local mesh = StaticFindObject(BOTTLE_MESH_PATH) or LoadAsset(BOTTLE_MESH_PATH)
@@ -235,7 +240,98 @@ LoopAsync(100, function()
     return false
 end)
 
+-- FP idle-hold: the raised grenade is a WeaponInHandsMesh skeletal comp on Skif —
+-- no grenade actor exists until the throw. Its AnimBP constructing = hands coming up.
+local FP_ANIM_PATH = "/Game/_STALKER2/Animations/Weapons/grenades/RGD5/AnimBP_Rgd5_fp.AnimBP_Rgd5_fp_C"
+local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
+
+local function fpRestore()
+    pcall(function()
+        if fp.mesh and fp.mesh:IsValid() then fp.mesh:SetVisibility(true, false) end
+    end)
+    pcall(function()
+        if fp.bottle and fp.bottle:IsValid() then fp.bottle:K2_DestroyComponent(fp.bottle) end
+    end)
+    fp.bottle, fp.mesh, fp.animName = nil, nil, nil
+end
+
+local function mainHandSID()
+    local sid = "unreadable"
+    pcall(function()
+        local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+        if cm and cm:IsValid() then
+            local data = cm:GetPlayerItemInHandsData()
+            local v = data.MainHandItemPrototypeID
+            local s = tostring(v and v.ToString and v:ToString() or v)
+            if s ~= "" and s ~= "nil" then sid = s end
+        end
+    end)
+    return sid
+end
+
+NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+    -- let the game finish wiring mesh+anim before restyling it
+    ExecuteWithDelay(150, function()
+        ExecuteInGameThread(function()
+            local ok, err = pcall(function()
+                if not (anim and anim:IsValid()) then return end
+                local sid = mainHandSID()
+                log("hands up: main hand = " .. sid)
+                if not (sid:find("Molotov") or sid == "unreadable") then return end
+                local mesh
+                pcall(function() mesh = anim:GetOwningComponent() end)
+                if not (mesh and mesh:IsValid()) then
+                    -- dump: the AnimBP instance's outer IS the WeaponInHandsMesh comp
+                    pcall(function() mesh = anim:GetOuter() end)
+                end
+                if not (mesh and mesh:IsValid()) then log("FP: no hands mesh") return end
+                fpRestore()
+                local bottle = StaticFindObject(BOTTLE_MESH_PATH) or LoadAsset(BOTTLE_MESH_PATH)
+                local smcClass = StaticFindObject("/Script/Engine.StaticMeshComponent")
+                local owner = mesh:GetOwner()
+                if not (bottle and bottle:IsValid() and smcClass and smcClass:IsValid()
+                        and owner and owner:IsValid()) then
+                    log("FP: prereqs missing")
+                    return
+                end
+                local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
+                              Translation = { X = 0, Y = 0, Z = 0 },
+                              Scale3D = { X = 1, Y = 1, Z = 1 } }
+                local comp = owner:AddComponentByClass(smcClass, true, idT, false)
+                if not (comp and comp:IsValid()) then log("FP: AddComponentByClass failed") return end
+                comp:SetStaticMesh(bottle)
+                comp:SetCollisionEnabled(0)
+                comp:K2_AttachToComponent(mesh, FName("None"), 2, 2, 0, false)   -- snap to comp root
+                mesh:SetVisibility(false, false)   -- hide grenade; child bottle stays visible
+                fp.bottle, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
+                log("FP: bottle in hand")
+            end)
+            if not ok then log("FP swap ERR: " .. tostring(err)) end
+        end)
+    end)
+end)
+
+-- Un-swap when the hands anim changes (lowered / thrown / weapon switched).
+LoopAsync(500, function()
+    if not fp.bottle then return false end
+    ExecuteInGameThread(function()
+        local keep = false
+        pcall(function()
+            if fp.mesh:IsValid() and fp.bottle:IsValid() then
+                local cur = fp.mesh.AnimScriptInstance
+                keep = cur and cur:IsValid() and cur:GetFullName() == fp.animName
+            end
+        end)
+        if fp.bottle and not keep then
+            log("FP: hands changed - bottle away")
+            fpRestore()
+        end
+    end)
+    return false
+end)
+
 -- F7: prototype-registration oracle — call the dev cheat UFunctions directly.
+
 local function liveInstance(className)
     local all = FindAllOf(className)
     if all then
