@@ -245,6 +245,26 @@ end)
 local FP_ANIM_PATH = "/Game/_STALKER2/Animations/Weapons/grenades/RGD5/AnimBP_Rgd5_fp.AnimBP_Rgd5_fp_C"
 local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 
+-- relative to the hidden grenade mesh root; F8 cycles these live
+local BOTTLE_TUNES = {
+    { s = 0.55, x = 0, y = 0, z = -8 },
+    { s = 0.45, x = 0, y = 0, z = -6 },
+    { s = 0.65, x = 0, y = 0, z = -10 },
+    { s = 0.40, x = 0, y = 0, z = -4 },
+    { s = 1.00, x = 0, y = 0, z = 0 },
+}
+local bottleTuneIdx = 1
+
+local function applyBottleTune()
+    local t = BOTTLE_TUNES[bottleTuneIdx]
+    pcall(function()
+        if fp.bottle and fp.bottle:IsValid() then
+            fp.bottle:SetRelativeScale3D({ X = t.s, Y = t.s, Z = t.s })
+            fp.bottle:K2_SetRelativeLocation({ X = t.x, Y = t.y, Z = t.z }, false, {}, false)
+        end
+    end)
+end
+
 local function fpRestore()
     pcall(function()
         if fp.mesh and fp.mesh:IsValid() then fp.mesh:SetVisibility(true, false) end
@@ -304,6 +324,7 @@ NotifyOnNewObject(FP_ANIM_PATH, function(anim)
                 comp:K2_AttachToComponent(mesh, FName("None"), 2, 2, 0, false)   -- snap to comp root
                 mesh:SetVisibility(false, false)   -- hide grenade; child bottle stays visible
                 fp.bottle, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
+                applyBottleTune()
                 log("FP: bottle in hand")
             end)
             if not ok then log("FP swap ERR: " .. tostring(err)) end
@@ -360,6 +381,17 @@ RegisterKeyBind(Key.F7, function()
             local ok, err = pcall(function() rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, 3, 1.0) end)
             log("XCreateItemInInventoryByID GrenadeMolotov -> " .. (ok and "called" or tostring(err)))
         end
+    end)
+end)
+
+-- F8: cycle bottle size/position presets on the live bottle
+RegisterKeyBind(Key.F8, function()
+    ExecuteInGameThread(function()
+        bottleTuneIdx = bottleTuneIdx % #BOTTLE_TUNES + 1
+        local t = BOTTLE_TUNES[bottleTuneIdx]
+        applyBottleTune()
+        log(string.format("F8 bottle tune %d/%d: scale %.2f offset %g %g %g",
+            bottleTuneIdx, #BOTTLE_TUNES, t.s, t.x, t.y, t.z))
     end)
 end)
 
