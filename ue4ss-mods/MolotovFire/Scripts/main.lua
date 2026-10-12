@@ -7,6 +7,7 @@ local UEHelpers = require("UEHelpers")
 -- Ambient bonfire BP (env set-dressing): self-contained VFX+light, no anomaly-spawner
 -- context needed. ClassicFireAnomaly null-derefs when raw-spawned — don't go back.
 local FIRE_CLASS_PATH = "/Game/_Stalker_2/VFX/Environment/BonFire/Blueprint/BP_BonFire.BP_BonFire_C"
+local BOTTLE_MESH_PATH = "/Game/_Stalker_2/items/consumable/SM_cns_cossacks_vodka_01_c.SM_cns_cossacks_vodka_01_c"
 local SPAWN_ARMED = true
 
 -- Real petrol-bomb pool: intense ~25s, rim dies first, heart gone by ~45s.
@@ -132,6 +133,31 @@ NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", 
     tracked[#tracked + 1] = { actor = grenade, x = 0, y = 0, z = 0, alive = true, seen = 0 }
     trackedCount = trackedCount + 1
     log("grenade spawned (equipped)")
+    -- swap RGD5 visual for the vodka bottle; components finish registering a beat later
+    ExecuteWithDelay(300, function()
+        ExecuteInGameThread(function()
+            pcall(function()
+                if not (grenade and grenade:IsValid()) then return end
+                local mesh = StaticFindObject(BOTTLE_MESH_PATH) or LoadAsset(BOTTLE_MESH_PATH)
+                if not (mesh and mesh:IsValid()) then log("bottle mesh failed to load") return end
+                local smc = StaticFindObject("/Script/Engine.StaticMeshComponent")
+                local comps = grenade:K2_GetComponentsByClass(smc)
+                local swapped = 0
+                comps:ForEach(function(_, elem)
+                    local c = elem:get()
+                    if c and c:IsValid() then
+                        pcall(function() c:SetStaticMesh(mesh) end)
+                        swapped = swapped + 1
+                    end
+                end)
+                -- recon: FP-hands visuals may live on a skeletal comp we can't retarget
+                local skc = StaticFindObject("/Script/Engine.SkeletalMeshComponent")
+                local skels = 0
+                grenade:K2_GetComponentsByClass(skc):ForEach(function() skels = skels + 1 end)
+                log(string.format("bottleize: %d static swapped, %d skeletal present", swapped, skels))
+            end)
+        end)
+    end)
 end)
 
 LoopAsync(100, function()
