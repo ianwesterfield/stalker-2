@@ -9,13 +9,13 @@ local UEHelpers = require("UEHelpers")
 local FIRE_CLASS_PATH = "/Game/_Stalker_2/VFX/Environment/BonFire/Blueprint/BP_BonFire.BP_BonFire_C"
 local SPAWN_ARMED = true
 
--- One throw = staggered pattern: fire guts out from the edges inward.
+-- One throw = one burning pool, ~10ft across: patches overlap into a single blaze.
 -- Burner anomalies take seconds to reach full blaze — short lives read faint.
 -- { count, min/max distance (cm), min/max lifetime (s), visual scale }
 local RINGS = {
     { count = 1, distMin = 0,   distMax = 0,   lifeMin = 85, lifeMax = 100, scale = 1.4 },  -- heart of the fire
-    { count = 4, distMin = 180, distMax = 300, lifeMin = 70, lifeMax = 85,  scale = 1.2 },  -- inner ring
-    { count = 5, distMin = 400, distMax = 580, lifeMin = 55, lifeMax = 70,  scale = 1.0 },  -- outer splash
+    { count = 4, distMin = 50,  distMax = 95,  lifeMin = 70, lifeMax = 85,  scale = 1.2 },  -- inner ring
+    { count = 5, distMin = 100, distMax = 150, lifeMin = 55, lifeMax = 70,  scale = 1.0 },  -- splash edge
 }
 
 -- Track live grenades; a vanished actor's last position = detonation site.
