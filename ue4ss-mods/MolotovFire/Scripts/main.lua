@@ -456,9 +456,7 @@ local function applyBottleTune()
             local rot = { Pitch = br.p + bottleOff.ry, Yaw = br.yaw + bottleOff.rz, Roll = br.r + bottleOff.rx }
             -- grip target in bone space; the bottle's bounds CENTER goes here, which
             -- cancels out the mesh pivot sitting at the bottle's base
-            local dx, dy, dz = bottleOff.x, bottleOff.y, bottleOff.z
-            if fp.liveFollow then dx, dy, dz = 0, 0, 0 end   -- windup rides the rig bone itself
-            local tx, ty, tz = bl.x + dx, bl.y + dy, bl.z + dz
+            local tx, ty, tz = bl.x + bottleOff.x, bl.y + bottleOff.y, bl.z + bottleOff.z
             local c = fp.midLocal or { x = 0, y = 0, z = 17 }
             local kml = StaticFindObject("/Script/Engine.Default__KismetMathLibrary")
             local fv = kml:GetForwardVector(rot)
@@ -529,6 +527,25 @@ local function handGrenadeDistances()
     return dist(fp.boneName or "jnt_r_hand"), dist("jnt_l_hand")
 end
 
+-- Weld the bottle to the FP rig bone itself: the rig is authored for the warped FP
+-- view, so body wrist/fist anchors always move out of proportion with the rendered
+-- hand. Author the approved pose (wrist frame), then KeepWorld re-attach to the
+-- bone — the engine turns it into a constant bone-local offset (rigid, no swim).
+local function rigWeld()
+    pcall(function()
+        if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()) then return end
+        sampleGrenadeBase(nil)
+        fp.bottle:K2_AttachToComponent(fp.mesh, FName("jnt_wpn_rgd5"), 1, 1, 1, false)
+        fp.welded = true
+        if not fp.weldLogged then
+            fp.weldLogged = true
+            local rl, rr = fp.bottle.RelativeLocation, fp.bottle.RelativeRotation
+            log(string.format("FP: welded to jnt_wpn_rgd5 rel %.1f %.1f %.1f rot %.1f %.1f %.1f",
+                rl.X, rl.Y, rl.Z, rr.Pitch, rr.Yaw, rr.Roll))
+        end
+    end)
+end
+
 local function trackTick()
     if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
             and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
@@ -536,25 +553,27 @@ local function trackTick()
     if okD and dR then
         local d = math.min(dR, dL)
         fp.tickN = (fp.tickN or 0) + 1
-        if fp.tickN % 240 == 0 then   -- threshold instrumentation (~every 4s)
-            log(string.format("FP: d=%.0f%s", d, fp.liveFollow and " (follow)" or ""))
+        if fp.tickN % 240 == 0 then   -- instrumentation (~every 4s)
+            log(string.format("FP: d=%.0f%s", d, fp.welded and " (welded)" or ""))
         end
         if lockedBase then
-            -- WINDUP: the FP grenade rig diverges from the body hand in world space
-            -- (rig authored for the warped FP view) — ride the rig through the swing,
-            -- hold the baked fist pose otherwise (idle fidgets + locomotion desync)
-            if fp.liveFollow then
-                if d < 25 or d > 60 then
-                    fp.liveFollow = nil
-                    log(string.format("FP: windup follow OFF (d=%.0f)", d))
-                    sampleGrenadeBase(nil)
-                else
-                    sampleGrenadeBase(nil, true)
+            if fp.welded then
+                -- locomotion desyncs the hidden rig (bones ride the legs); windup also
+                -- grows d but the player is near-still — speed disambiguates
+                if d > 35 then
+                    local speed = 0
+                    pcall(function()
+                        local v = UEHelpers.GetPlayerController().Pawn.CharacterMovement.Velocity
+                        speed = math.sqrt(v.X * v.X + v.Y * v.Y)
+                    end)
+                    if speed > 120 then
+                        fp.welded = nil
+                        log(string.format("FP: rig desync (d=%.0f v=%.0f) - fist hold", d, speed))
+                        sampleGrenadeBase(nil)
+                    end
                 end
-            elseif d > 28 and d <= 60 then
-                fp.liveFollow = true
-                log(string.format("FP: windup follow ON (d=%.0f)", d))
-                sampleGrenadeBase(nil, true)
+            elseif d <= 30 then
+                rigWeld()
             end
         elseif d <= 35 then   -- unlocked live mode: hold last base past the desync gate
             if dL + 5 < dR then
@@ -613,7 +632,7 @@ local function fpRestore()
     fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
     fp.anchor, fp.boneName, fp.baseLoc, fp.baseRot = nil, nil, nil, nil
     fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal, fp.rag = nil, nil, nil, nil, nil, nil
-    fp.gripLogged, fp.liveFollow, fp.tickN = nil, nil, nil
+    fp.gripLogged, fp.welded, fp.weldLogged, fp.tickN = nil, nil, nil, nil
 end
 
 local function mainHandSID()
@@ -746,6 +765,7 @@ fpSwap = function(anim, attempt)
                     ExecuteInGameThread(function()
                         if fp.bottle and fp.bottle:IsValid() and fp.animName == an then
                             sampleGrenadeBase("settled")
+                            if lockedBase then fp.welded = nil end   -- re-weld off the settled pose
                         end
                     end)
                 end)
@@ -871,12 +891,14 @@ consumeNudges = function()   -- runs inside the tick hook: game-thread, serializ
         elseif kind == "lock" then
             if lockedBase then
                 lockedBase = nil
+                fp.welded = nil
                 log("fidget pose UNLOCKED - live grenade-path tracking")
             elseif fp.baseLoc and fp.baseRot then
                 lockedBase = {
                     loc = { x = fp.baseLoc.x, y = fp.baseLoc.y, z = fp.baseLoc.z },
                     rot = { p = fp.baseRot.p, yaw = fp.baseRot.yaw, r = fp.baseRot.r },
                 }
+                fp.welded = nil
                 log(string.format(
                     "fidget pose LOCKED base loc %.1f %.1f %.1f rot %.1f %.1f %.1f - send this line + final state: to bake",
                     lockedBase.loc.x, lockedBase.loc.y, lockedBase.loc.z,
@@ -884,6 +906,7 @@ consumeNudges = function()   -- runs inside the tick hook: game-thread, serializ
             end
         end
     end
+    if lockedBase then fp.welded = nil end   -- tuner authored on the wrist; re-weld next tick
 end
 
 -- tiny bottle-mesh "dot" at the pivot + flat disc pinned ON the hand joint itself
