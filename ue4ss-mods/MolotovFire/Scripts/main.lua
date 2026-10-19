@@ -155,22 +155,17 @@ local function detonate(t, grenade, x, y, z, how)
 end
 
 local okHit, errHit = pcall(function()
-    RegisterHook("/Script/Stalker2.Grenade:OnHit", function(selfParam, _, _, _, hitParam)
+    -- hook body = pointer match + flag ONLY: unwrapping the FHitResult param /
+    -- calling Explode() inside the physics hit dispatch AV'd in UE4SS (0x38);
+    -- the 100ms tracker loop detonates from its proven-safe context instead
+    RegisterHook("/Script/Stalker2.Grenade:OnHit", function(selfParam)
         pcall(function()
             if trackedCount == 0 then return end
             local g = selfParam:get()
-            local sid = ""
-            pcall(function() sid = tostring(g.SID) end)
-            if not sid:find("Molotov") then return end   -- real grenades keep their timers
             for _, t in ipairs(tracked) do
-                if t.alive and t.armed and not t.detonated and sameObj(t.actor, g) then
-                    local ix, iy, iz
-                    pcall(function()
-                        local hit = hitParam:get()
-                        local p = hit.ImpactPoint or hit.Location
-                        ix, iy, iz = p.X, p.Y, p.Z
-                    end)
-                    detonate(t, g, ix or t.x, iy or t.y, iz or t.z, "impact")
+                if t.alive and t.armed and not t.detonated and not t.hitPending
+                        and sameObj(t.actor, g) then
+                    t.hitPending = true
                     return
                 end
             end
@@ -229,6 +224,28 @@ LoopAsync(100, function()
         for _, t in ipairs(tracked) do
             if t.alive then
                 local ok = pcall(function()
+                    -- deferred impact: flagged by the OnHit hook, executed here
+                    if t.hitPending and not t.detonated then
+                        t.hitPending = nil
+                        local sid, px, py, pz = "", t.x, t.y, t.z
+                        if t.actor:IsValid() then
+                            pcall(function()
+                                local v = t.actor.SID
+                                sid = tostring(v and v.ToString and v:ToString() or v)
+                            end)
+                            pcall(function()   -- resting spot = true ground zero
+                                local loc = t.actor:K2_GetActorLocation()
+                                if not (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
+                                    px, py, pz = loc.X, loc.Y, loc.Z
+                                end
+                            end)
+                        end
+                        if sid:find("Molotov") then
+                            detonate(t, t.actor, px, py, pz, "impact")
+                            return
+                        end
+                        -- non-molotov slipped in pre-bottleize: engine timer keeps it
+                    end
                     -- fallback fuse: soft landings (water/bushes) may never fire OnHit
                     if t.armed and os.clock() >= t.boomAt then
                         detonate(t, t.actor, t.x, t.y, t.z, "fuse fallback")
