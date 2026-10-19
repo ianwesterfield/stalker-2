@@ -1,6 +1,6 @@
-# Install/refresh UE4SS (experimental) + the MolotovFire Lua mod into the game.
-# -Remove uninstalls everything UE4SS-related.
-param([switch]$Remove)
+# Install/refresh UE4SS (experimental) + repo Lua mods into the game.
+# -Remove uninstalls everything UE4SS-related. -Mods limits which mods deploy (default: all).
+param([switch]$Remove, [string[]]$Mods)
 
 . "$PSScriptRoot\paths.ps1"
 
@@ -34,7 +34,9 @@ else {
 
 # Deploy Lua mods from the repo (repo = source of truth)
 $srcMods = Join-Path $RepoRoot "ue4ss-mods"
-Get-ChildItem $srcMods -Directory | ForEach-Object {
+Get-ChildItem $srcMods -Directory |
+Where-Object { -not $Mods -or $_.Name -in $Mods } |
+ForEach-Object {
   $dest = Join-Path $ue4ssDir "Mods\$($_.Name)"
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
   Copy-Item "$($_.FullName)\*" $dest -Recurse -Force
