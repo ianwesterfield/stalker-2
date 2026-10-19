@@ -257,6 +257,14 @@ local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 local bottleOff = { s = 0.5, x = 0, y = 0, z = 0, rx = -90, ry = 0, rz = 0 }
 local tuneMode, fineStep = false, false
 local showPivotMarker   -- fwd-declared; defined with the tuner keys below
+local lockedBase        -- K in tune mode: freeze base at the current fidget pose
+local consumeNudges     -- fwd-declared; tuner intents run inside the tick hook
+-- keybind handlers push plain data only — UObject calls from rapid
+-- ExecuteInGameThread keypresses raced the tick hook inside UE4SS (AV at 0x36)
+local nudgeQueue = {}
+local function queueNudge(n)
+    if fp.bottle then nudgeQueue[#nudgeQueue + 1] = n end
+end
 
 local function socketNames(mesh)
     local names = {}
@@ -342,6 +350,13 @@ end
 -- snap bottle to the in-hand grenade body bone, then store the resulting relative
 -- transform (on jnt_r_hand) as the base pose — tuner offsets are deltas from it
 local function sampleGrenadeBase(tag)
+    if lockedBase then   -- captured fidget pose wins over live sampling
+        fp.baseLoc = { x = lockedBase.loc.x, y = lockedBase.loc.y, z = lockedBase.loc.z }
+        fp.baseRot = { p = lockedBase.rot.p, yaw = lockedBase.rot.yaw, r = lockedBase.rot.r }
+        if tag then log("FP: using LOCKED fidget base (" .. tag .. ")") end
+        applyBottleTune()
+        return
+    end
     local ok, err = pcall(function()
         if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()) then return end
         local gl = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
@@ -366,9 +381,7 @@ end
 -- Lua registry refs 60x/sec and raced UE4SS's callback GC = access violation).
 -- Source: HUD stat-panel widget Tick (ZoneLink-proven, fires natively every frame);
 -- the grenade AnimBP owns only AnimGraph (dump-verified) — nothing to hook there.
-local function trackTick()
-    if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
-            and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
+local function liveRebase()
     local g = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
     local function dist(bone)
         local h = fp.anchor:GetSocketLocation(FName(bone))
@@ -387,6 +400,13 @@ local function trackTick()
         fp.leftLogged = nil
     end
     sampleGrenadeBase(nil)   -- quiet re-base; tuner deltas ride on top
+end
+
+local function trackTick()
+    if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
+            and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
+    if not lockedBase then liveRebase() end
+    if consumeNudges then consumeNudges() end
 end
 
 local HUD_TICK_HOOK = "/Game/GameLite/FPS_Game/UIRemaster/HUD/StatPanel/W_UpdatedStatPanel.W_UpdatedStatPanel_C:Tick"
@@ -663,6 +683,46 @@ local function rotNudge(axis, sign)
     logBottleOff("rot " .. axis .. (sign > 0 and "+" or "-") .. ":")
 end
 
+consumeNudges = function()   -- runs inside the tick hook: game-thread, serialized
+    if #nudgeQueue == 0 then return end
+    local q = nudgeQueue
+    nudgeQueue = {}
+    for _, n in ipairs(q) do
+        local kind = n[1]
+        if kind == "cam" then
+            camNudge(n[2], n[3])
+        elseif kind == "rot" then
+            rotNudge(n[2], n[3])
+        elseif kind == "scale" then
+            bottleOff.s = math.max(0.02, bottleOff.s + n[2] * (fineStep and 0.02 or 0.1))
+            applyBottleTune()
+            logBottleOff(n[2] > 0 and "scale+:" or "scale-:")
+        elseif kind == "vis" then
+            pcall(function()
+                if fp.bottle and fp.bottle:IsValid() then
+                    fp.hiddenForPivot = not fp.hiddenForPivot
+                    fp.bottle:SetVisibility(not fp.hiddenForPivot, false)
+                    log("bottle " .. (fp.hiddenForPivot and "hidden - pivot dot + hand disc exposed" or "shown"))
+                end
+            end)
+        elseif kind == "lock" then
+            if lockedBase then
+                lockedBase = nil
+                log("fidget pose UNLOCKED - live grenade-path tracking")
+            elseif fp.baseLoc and fp.baseRot then
+                lockedBase = {
+                    loc = { x = fp.baseLoc.x, y = fp.baseLoc.y, z = fp.baseLoc.z },
+                    rot = { p = fp.baseRot.p, yaw = fp.baseRot.yaw, r = fp.baseRot.r },
+                }
+                log(string.format(
+                    "fidget pose LOCKED base loc %.1f %.1f %.1f rot %.1f %.1f %.1f - send this line + final state: to bake",
+                    lockedBase.loc.x, lockedBase.loc.y, lockedBase.loc.z,
+                    lockedBase.rot.p, lockedBase.rot.yaw, lockedBase.rot.r))
+            end
+        end
+    end
+end
+
 -- tiny bottle-mesh "dot" at the pivot + flat disc pinned ON the hand joint itself
 -- (shipping builds compile out DrawDebug*, so markers are mesh clones)
 showPivotMarker = function(on)
@@ -707,7 +767,7 @@ local function setTuneMode(on)
     end)
     showPivotMarker(on)
     log("TUNE MODE " .. (on
-        and "ON - movement locked | WASD move, PgUp/PgDn depth, Up/Dn scale, Lt/Rt roll, ,/. pitch, -/= yaw, V peek pivot, End fine"
+        and "ON - movement locked | WASD move, PgUp/PgDn depth, Up/Dn scale, Lt/Rt roll, ,/. pitch, -/= yaw, K lock fidget pose, V peek pivot, End fine"
         or "OFF - movement restored"))
     if on then logBottleOff("state:") end
 end
@@ -717,50 +777,33 @@ RegisterKeyBind(Key.HOME, function()
 end)
 
 RegisterKeyBind(Key.END, function()
-    ExecuteInGameThread(function()
-        fineStep = not fineStep
-        log("tune steps: " .. (fineStep and "FINE 0.5cm/5deg" or "coarse 2cm/15deg"))
-    end)
+    fineStep = not fineStep
+    log("tune steps: " .. (fineStep and "FINE 0.5cm/5deg" or "coarse 2cm/15deg"))
 end)
 
 local function tuneBind(key, fn)
     RegisterKeyBind(key, function()
         if not tuneMode then return end
-        ExecuteInGameThread(fn)
+        fn()   -- push-only; the tick hook does the real work on the game thread
     end)
 end
 
-tuneBind(Key.W, function() camNudge("up", 1) end)
-tuneBind(Key.S, function() camNudge("up", -1) end)
-tuneBind(Key.A, function() camNudge("right", -1) end)
-tuneBind(Key.D, function() camNudge("right", 1) end)
-tuneBind(Key.PAGE_UP, function() camNudge("fwd", -1) end)   -- toward camera
-tuneBind(Key.PAGE_DOWN, function() camNudge("fwd", 1) end)
-tuneBind(Key.UP_ARROW, function()
-    bottleOff.s = bottleOff.s + (fineStep and 0.02 or 0.1)
-    applyBottleTune()
-    logBottleOff("scale+:")
-end)
-tuneBind(Key.DOWN_ARROW, function()
-    bottleOff.s = math.max(0.02, bottleOff.s - (fineStep and 0.02 or 0.1))
-    applyBottleTune()
-    logBottleOff("scale-:")
-end)
-tuneBind(Key.LEFT_ARROW, function() rotNudge("rx", -1) end)
-tuneBind(Key.RIGHT_ARROW, function() rotNudge("rx", 1) end)
-tuneBind(Key.OEM_COMMA, function() rotNudge("ry", -1) end)
-tuneBind(Key.OEM_PERIOD, function() rotNudge("ry", 1) end)
-tuneBind(Key.OEM_MINUS, function() rotNudge("rz", -1) end)
-tuneBind(Key.OEM_PLUS, function() rotNudge("rz", 1) end)
-tuneBind(Key.V, function()
-    pcall(function()
-        if fp.bottle and fp.bottle:IsValid() then
-            fp.hiddenForPivot = not fp.hiddenForPivot
-            fp.bottle:SetVisibility(not fp.hiddenForPivot, false)
-            log("bottle " .. (fp.hiddenForPivot and "hidden - pivot dot + hand disc exposed" or "shown"))
-        end
-    end)
-end)
+tuneBind(Key.W, function() queueNudge({ "cam", "up", 1 }) end)
+tuneBind(Key.S, function() queueNudge({ "cam", "up", -1 }) end)
+tuneBind(Key.A, function() queueNudge({ "cam", "right", -1 }) end)
+tuneBind(Key.D, function() queueNudge({ "cam", "right", 1 }) end)
+tuneBind(Key.PAGE_UP, function() queueNudge({ "cam", "fwd", -1 }) end)   -- toward camera
+tuneBind(Key.PAGE_DOWN, function() queueNudge({ "cam", "fwd", 1 }) end)
+tuneBind(Key.UP_ARROW, function() queueNudge({ "scale", 1 }) end)
+tuneBind(Key.DOWN_ARROW, function() queueNudge({ "scale", -1 }) end)
+tuneBind(Key.LEFT_ARROW, function() queueNudge({ "rot", "rx", -1 }) end)
+tuneBind(Key.RIGHT_ARROW, function() queueNudge({ "rot", "rx", 1 }) end)
+tuneBind(Key.OEM_COMMA, function() queueNudge({ "rot", "ry", -1 }) end)
+tuneBind(Key.OEM_PERIOD, function() queueNudge({ "rot", "ry", 1 }) end)
+tuneBind(Key.OEM_MINUS, function() queueNudge({ "rot", "rz", -1 }) end)
+tuneBind(Key.OEM_PLUS, function() queueNudge({ "rot", "rz", 1 }) end)
+tuneBind(Key.V, function() queueNudge({ "vis" }) end)
+tuneBind(Key.K, function() queueNudge({ "lock" }) end)
 
 -- F9: object dump without the CTRL+O GUI (no PDA conflict, no focus juggling)
 RegisterKeyBind(Key.F9, function()
