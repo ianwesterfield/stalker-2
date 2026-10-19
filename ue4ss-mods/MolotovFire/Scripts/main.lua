@@ -245,14 +245,20 @@ end)
 local FP_ANIM_PATH = "/Game/_STALKER2/Animations/Weapons/grenades/RGD5/AnimBP_Rgd5_fp.AnimBP_Rgd5_fp_C"
 local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 
--- live tuner in jnt_wpn_rgd5 bone frame: Ctrl+B = axis (incl. scale), Ctrl+Up/Down = step
--- s=0.36: label says 0.5L (~25cm/7cm real); 0.45 measured ~25% oversized vs hand breadth
-local bottleOff = { s = 0.36, x = -8, y = -2, z = 6 }   -- user-tuned 2026-10-12
-local AXES = { "x", "y", "z", "s" }
-local axisIdx = 1
+-- TUNE MODE (Home toggles; player movement locked while on):
+--   W/S = screen up/down, A/D = left/right, PgUp/PgDn = toward/away camera
+--   arrows = pitch/yaw, ,/. = roll, -/= = scale, V = hide bottle (pivot marker stays)
+--   End = fine steps. Deltas ride the auto grenade-matched base pose and move the
+--   bottle's MID-BODY: the mesh pivot sits at the bottle BASE, so each apply solves
+--   the location that puts the bounds CENTER (not the pivot) on base+delta.
+-- RECONSTRUCTION: x/y/z = the user-verified in-fist point from the base-pivot era;
+-- rx-90 = the approved orientation. Center pinned there closes the old half-bottle
+-- gap along the bottle's own axis. s=0.5 reads hand-proportional with mid-in-fist.
+local bottleOff = { s = 0.5, x = 17.8, y = 21.1, z = 0.8, rx = -90, ry = 0, rz = 0 }
+local tuneMode, fineStep = false, false
+local showPivotMarker   -- fwd-declared; defined with the tuner keys below
 
--- the FP anim moves the grenade's BONES into the hand; comp root stays put
-local function pickGrenadeBone(mesh)
+local function socketNames(mesh)
     local names = {}
     local function unwrap(raw)
         local v = raw
@@ -269,6 +275,12 @@ local function pickGrenadeBone(mesh)
             for i = 0, math.min(n - 1, 15) do names[#names + 1] = unwrap(mesh:GetBoneName(i)) end
         end)
     end
+    return names
+end
+
+-- the FP anim moves the grenade's BONES into the hand; comp root stays put
+local function pickGrenadeBone(mesh)
+    local names = socketNames(mesh)
     log("FP sockets/bones: " .. (#names > 0 and table.concat(names, ", ") or "(none found)"))
     for _, nm in ipairs(names) do
         local l = nm:lower()
@@ -277,19 +289,120 @@ local function pickGrenadeBone(mesh)
     return names[#names]   -- leaf bone of a tiny rig = the item itself; nil -> root
 end
 
+-- right-hand bone on the VISIBLE body rig — the hidden grenade rig's pose goes
+-- idle/frozen during locomotion, so its bones bob with the legs, not the hand
+local function pickHandBone(mesh, fallback)
+    local hands = {}
+    for _, nm in ipairs(socketNames(mesh)) do
+        if nm:lower():find("hand") then hands[#hands + 1] = nm end
+    end
+    log("FP: body hand bones: " .. (#hands > 0 and table.concat(hands, ", ") or "(none)"))
+    for _, pat in ipairs({ "^jnt_r_hand$", "r_hand", "hand_r", "righthand" }) do
+        for _, nm in ipairs(hands) do
+            if nm:lower():find(pat) then return nm end
+        end
+    end
+    if fallback and fallback ~= "" and fallback ~= "None" then return fallback end
+    return hands[1]
+end
+
 local function applyBottleTune()
     pcall(function()
         if fp.bottle and fp.bottle:IsValid() then
+            local bl = fp.baseLoc or { x = 0, y = 0, z = 0 }
+            local br = fp.baseRot or { p = 0, yaw = 0, r = 0 }
+            local rot = { Pitch = br.p + bottleOff.ry, Yaw = br.yaw + bottleOff.rz, Roll = br.r + bottleOff.rx }
+            -- grip target in bone space; the bottle's bounds CENTER goes here, which
+            -- cancels out the mesh pivot sitting at the bottle's base
+            local tx, ty, tz = bl.x + bottleOff.x, bl.y + bottleOff.y, bl.z + bottleOff.z
+            local c = fp.midLocal or { x = 0, y = 0, z = 17 }
+            local kml = StaticFindObject("/Script/Engine.Default__KismetMathLibrary")
+            local fv = kml:GetForwardVector(rot)
+            local rv = kml:GetRightVector(rot)
+            local uv = kml:GetUpVector(rot)
+            local ox = (fv.X * c.x + rv.X * c.y + uv.X * c.z) * bottleOff.s
+            local oy = (fv.Y * c.x + rv.Y * c.y + uv.Y * c.z) * bottleOff.s
+            local oz = (fv.Z * c.x + rv.Z * c.y + uv.Z * c.z) * bottleOff.s
             fp.bottle:SetRelativeScale3D({ X = bottleOff.s, Y = bottleOff.s, Z = bottleOff.s })
-            fp.bottle:K2_SetRelativeLocation(
-                { X = bottleOff.x, Y = bottleOff.y, Z = bottleOff.z }, false, {}, false)
+            fp.bottle:K2_SetRelativeLocation({ X = tx - ox, Y = ty - oy, Z = tz - oz }, false, {}, false)
+            fp.bottle:K2_SetRelativeRotation(rot, false, {}, false)
+            if fp.marker and fp.marker:IsValid() then   -- marker = the grip/mid point
+                fp.marker:K2_SetRelativeLocation({ X = tx, Y = ty, Z = tz }, false, {}, false)
+            end
         end
     end)
 end
 
 local function logBottleOff(prefix)
-    log(string.format("%s scale %.2f offset %g %g %g (axis %s)",
-        prefix, bottleOff.s, bottleOff.x, bottleOff.y, bottleOff.z, AXES[axisIdx]))
+    log(string.format("%s scale %.2f offset %g %g %g rot %g %g %g%s",
+        prefix, bottleOff.s, bottleOff.x, bottleOff.y, bottleOff.z,
+        bottleOff.rx, bottleOff.ry, bottleOff.rz, fineStep and " (fine)" or ""))
+end
+
+-- snap bottle to the in-hand grenade body bone, then store the resulting relative
+-- transform (on jnt_r_hand) as the base pose — tuner offsets are deltas from it
+local function sampleGrenadeBase(tag)
+    local ok, err = pcall(function()
+        if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()) then return end
+        local gl = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
+        local gr = fp.mesh:GetSocketRotation(FName("jnt_wpn_rgd5"))
+        fp.bottle:K2_SetWorldLocationAndRotation(
+            { X = gl.X, Y = gl.Y, Z = gl.Z },
+            { Pitch = gr.Pitch, Yaw = gr.Yaw, Roll = gr.Roll }, false, {}, false)
+        local rl, rr = fp.bottle.RelativeLocation, fp.bottle.RelativeRotation
+        fp.baseLoc = { x = rl.X, y = rl.Y, z = rl.Z }
+        fp.baseRot = { p = rr.Pitch, yaw = rr.Yaw, r = rr.Roll }
+        if tag then
+            log(string.format("FP: grenade-match (%s) base loc %.1f %.1f %.1f rot %.0f %.0f %.0f",
+                tag, rl.X, rl.Y, rl.Z, rr.Roll, rr.Pitch, rr.Yaw))
+        end
+    end)
+    if not ok and tag then log("grenade-match ERR: " .. tostring(err)) end
+    applyBottleTune()
+end
+
+-- Live grenade-match, v2: re-base from INSIDE the grenade AnimBP's own update event.
+-- RegisterHook is registered once and runs natively on the game thread every anim
+-- tick — the old LoopAsync(16)+ExecuteInGameThread version queued a fresh Lua registry
+-- ref 60x/sec and raced UE4SS's callback GC (access violation in UE4SS.dll).
+local function trackTick()
+    if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
+            and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
+    local g = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
+    local function dist(bone)
+        local h = fp.anchor:GetSocketLocation(FName(bone))
+        local dx, dy, dz = g.X - h.X, g.Y - h.Y, g.Z - h.Z
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+    end
+    local dR = dist(fp.boneName or "jnt_r_hand")
+    local dL = dist("jnt_l_hand")
+    if math.min(dR, dL) > 35 then return end   -- locomotion desync rides the legs - hold last good base
+    if dL + 5 < dR then
+        if not fp.leftLogged then
+            fp.leftLogged = true
+            log(string.format("FP: grenade bone nearer LEFT hand (L %.0f vs R %.0f) - fidget hand-swap?", dL, dR))
+        end
+    elseif dR <= dL then
+        fp.leftLogged = nil
+    end
+    sampleGrenadeBase(nil)   -- quiet re-base; tuner deltas ride on top
+end
+
+local trackHooked, trackHookLogged = false, false
+local function hookGrenadeTick()   -- call once the AnimBP class is loaded (at equip)
+    if trackHooked then return end
+    local ok, err = pcall(function()
+        RegisterHook(FP_ANIM_PATH .. ":BlueprintUpdateAnimation", function()
+            pcall(trackTick)
+        end)
+    end)
+    trackHooked = ok
+    if trackHooked then
+        log("FP: live tracking hooked to grenade AnimBP tick")
+    elseif not trackHookLogged then
+        trackHookLogged = true
+        log("FP: AnimBP has no BlueprintUpdateAnimation event - static grenade-match base only")
+    end
 end
 
 local function fpRestore()
@@ -302,7 +415,18 @@ local function fpRestore()
     pcall(function()
         if fp.bottle and fp.bottle:IsValid() then fp.bottle:K2_DestroyComponent(fp.bottle) end
     end)
+    pcall(function()
+        if fp.marker and fp.marker:IsValid() then fp.marker:K2_DestroyComponent(fp.marker) end
+    end)
+    pcall(function()
+        if fp.handDot and fp.handDot:IsValid() then fp.handDot:K2_DestroyComponent(fp.handDot) end
+    end)
+    pcall(function()
+        if fp.rag and fp.rag:IsValid() then fp.rag:K2_DestroyComponent(fp.rag) end
+    end)
     fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
+    fp.anchor, fp.boneName, fp.baseLoc, fp.baseRot = nil, nil, nil, nil
+    fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal, fp.rag = nil, nil, nil, nil, nil, nil
 end
 
 local function mainHandSID()
@@ -351,17 +475,81 @@ NotifyOnNewObject(FP_ANIM_PATH, function(anim)
                 if not (comp and comp:IsValid()) then log("FP: AddComponentByClass failed") return end
                 comp:SetStaticMesh(bottle)
                 comp:SetCollisionEnabled(0)
-                local bone = pickGrenadeBone(mesh)
-                comp:K2_AttachToComponent(mesh, FName(bone or "None"), 2, 2, 0, false)
-                -- hidden skel meshes stop ticking bones by default -> bottle freezes while hands sway
+                pcall(function()   -- mesh-local bounds center; pivot is at the bottle BASE
+                    local mn, mx = {}, {}
+                    comp:GetLocalBounds(mn, mx)
+                    if mn.Z and mx.Z then
+                        fp.midLocal = { x = (mn.X + mx.X) / 2, y = (mn.Y + mx.Y) / 2, z = (mn.Z + mx.Z) / 2 }
+                        log(string.format("FP: bottle mid-local %.1f %.1f %.1f", fp.midLocal.x, fp.midLocal.y, fp.midLocal.z))
+                    end
+                end)
+                -- UE5.5 FP pass warps arms toward camera; unflagged comps render ~2x too far out
+                pcall(function() comp:SetFirstPersonPrimitiveType(1) end)   -- 1 = FirstPerson
+                -- anchor to the body rig the player SEES; the hidden grenade rig desyncs in locomotion
+                local parent, parentSock
+                pcall(function() parent = mesh:GetAttachParent() end)
+                pcall(function()
+                    local s = mesh:GetAttachSocketName()
+                    parentSock = tostring(s and s.ToString and s:ToString() or s)
+                end)
+                local target, bone = nil, nil
+                if parent and parent:IsValid() then
+                    log("FP: grenade mesh rides " .. parent:GetFullName() .. " @ " .. tostring(parentSock))
+                    bone = pickHandBone(parent, parentSock)
+                    if bone then target = parent end
+                end
+                if not target then   -- fallback: old grenade-bone attach
+                    target, bone = mesh, pickGrenadeBone(mesh)
+                end
+                -- hidden skel meshes stop ticking; keep grenade rig posed so we can sample it
                 pcall(function()
                     fp.prevTick = mesh.VisibilityBasedAnimTickOption
                     mesh.VisibilityBasedAnimTickOption = 0   -- AlwaysTickPoseAndRefreshBones
                 end)
+                comp:K2_AttachToComponent(target, FName(bone or "None"), 2, 2, 0, false)
                 mesh:SetVisibility(false, false)   -- hide grenade; child bottle stays visible
                 fp.bottle, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
-                applyBottleTune()
-                log("FP: bottle in hand (bone " .. tostring(bone) .. ")")
+                fp.anchor, fp.boneName = target, bone
+                sampleGrenadeBase("equip")
+                hookGrenadeTick()
+                if tuneMode and showPivotMarker then showPivotMarker(true) end
+                -- flaming rag POC: dump-verified lamp/candle flame parked at the neck;
+                -- child of the bottle comp so it inherits scale and rides the tune
+                local ragOk, ragErr = pcall(function()
+                    local ncClass = StaticFindObject("/Script/Niagara.NiagaraComponent")
+                    if not (ncClass and ncClass:IsValid()) then log("FP: rag - NiagaraComponent class missing") return end
+                    local ns, nsPath
+                    for _, p in ipairs({
+                        "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Kerosene_2.NS_Fire_Kerosene_2",
+                        "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle_2.NS_Fire_Candle_2",
+                        "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle.NS_Fire_Candle",
+                    }) do
+                        ns = StaticFindObject(p)
+                        if not (ns and ns:IsValid()) then ns = LoadAsset(p) end
+                        if ns and ns:IsValid() then nsPath = p break end
+                    end
+                    if not (ns and ns:IsValid()) then log("FP: rag - no fire asset loadable") return end
+                    local rag = owner:AddComponentByClass(ncClass, true, idT, false)
+                    if not (rag and rag:IsValid()) then log("FP: rag - AddComponentByClass failed") return end
+                    rag:SetAsset(ns)
+                    pcall(function() rag:SetFirstPersonPrimitiveType(1) end)
+                    rag:K2_AttachToComponent(comp, FName("None"), 2, 2, 0, false)
+                    rag:K2_SetRelativeLocation(
+                        { X = 0, Y = 0, Z = (fp.midLocal and fp.midLocal.z or 12.7) * 2 }, false, {}, false)
+                    pcall(function() rag:Activate(true) end)
+                    fp.rag = rag
+                    log("FP: rag flame lit (" .. nsPath:match("([^/]+)$") .. ")")
+                end)
+                if not ragOk then log("FP: rag ERR: " .. tostring(ragErr)) end
+                log("FP: bottle on " .. (target == mesh and "grenade" or "body") .. " bone " .. tostring(bone))
+                local an = fp.animName
+                ExecuteWithDelay(600, function()   -- re-sample once the raise anim settles
+                    ExecuteInGameThread(function()
+                        if fp.bottle and fp.bottle:IsValid() and fp.animName == an then
+                            sampleGrenadeBase("settled")
+                        end
+                    end)
+                end)
             end)
             if not ok then log("FP swap ERR: " .. tostring(err)) end
         end)
@@ -406,10 +594,8 @@ RegisterKeyBind(Key.F7, function()
         local build = liveInstance("CustomConsoleManagerBuild")
         log("CCM Build instance: " .. tostring(build ~= nil))
         if build then
-            for _, sid in ipairs({ "Vodka", "GrenadeMolotov" }) do
-                local ok, err = pcall(function() build:XSpawnItemNearPlayerBySID(sid) end)
-                log("XSpawnItemNearPlayerBySID " .. sid .. " -> " .. (ok and "called" or tostring(err)))
-            end
+            local ok, err = pcall(function() build:XSpawnItemNearPlayerBySID("GrenadeMolotov") end)
+            log("XSpawnItemNearPlayerBySID GrenadeMolotov -> " .. (ok and "called" or tostring(err)))
         end
         local rk = liveInstance("CustomConsoleManagerRK")
         log("CCM RK instance: " .. tostring(rk ~= nil))
@@ -420,29 +606,136 @@ RegisterKeyBind(Key.F7, function()
     end)
 end)
 
--- Ctrl+B: select nudge axis; Ctrl+Up/Down: move bottle ±2cm on it
-RegisterKeyBind(Key.B, { ModifierKey.CONTROL }, function()
+local function posStep() return fineStep and 0.5 or 2 end
+local function rotStep() return fineStep and 5 or 15 end
+
+-- fold a camera-relative world move (fwd/right/up) into bone-frame xyz deltas
+local function camNudge(which, sign)
+    local ok, err = pcall(function()
+        if not (fp.bottle and fp.bottle:IsValid() and fp.anchor and fp.anchor:IsValid()) then return end
+        local kml = StaticFindObject("/Script/Engine.Default__KismetMathLibrary")
+        local rot = UEHelpers.GetPlayerController():GetControlRotation()
+        local v
+        if which == "fwd" then v = kml:GetForwardVector(rot)
+        elseif which == "right" then v = kml:GetRightVector(rot)
+        else v = kml:GetUpVector(rot) end
+        local sockRot = fp.anchor:GetSocketRotation(FName(fp.boneName or "None"))
+        local sf = kml:GetForwardVector(sockRot)
+        local sr = kml:GetRightVector(sockRot)
+        local su = kml:GetUpVector(sockRot)
+        local step = sign * posStep()
+        local function r1(x) return math.floor(x * 10 + 0.5) / 10 end
+        bottleOff.x = r1(bottleOff.x + step * (v.X * sf.X + v.Y * sf.Y + v.Z * sf.Z))
+        bottleOff.y = r1(bottleOff.y + step * (v.X * sr.X + v.Y * sr.Y + v.Z * sr.Z))
+        bottleOff.z = r1(bottleOff.z + step * (v.X * su.X + v.Y * su.Y + v.Z * su.Z))
+        applyBottleTune()
+        logBottleOff("move " .. which .. (sign > 0 and "+" or "-") .. ":")
+    end)
+    if not ok then log("tune-move ERR: " .. tostring(err)) end
+end
+
+local function rotNudge(axis, sign)
+    bottleOff[axis] = bottleOff[axis] + sign * rotStep()
+    applyBottleTune()
+    logBottleOff("rot " .. axis .. (sign > 0 and "+" or "-") .. ":")
+end
+
+-- tiny bottle-mesh "dot" at the pivot + flat disc pinned ON the hand joint itself
+-- (shipping builds compile out DrawDebug*, so markers are mesh clones)
+showPivotMarker = function(on)
+    pcall(function()
+        if not on then
+            if fp.marker and fp.marker:IsValid() then fp.marker:K2_DestroyComponent(fp.marker) end
+            if fp.handDot and fp.handDot:IsValid() then fp.handDot:K2_DestroyComponent(fp.handDot) end
+            fp.marker, fp.handDot = nil, nil
+            return
+        end
+        if fp.marker and fp.marker:IsValid() then return end
+        if not (fp.bottle and fp.bottle:IsValid() and fp.anchor and fp.anchor:IsValid()) then return end
+        local mesh = StaticFindObject(BOTTLE_MESH_PATH)
+        local smcClass = StaticFindObject("/Script/Engine.StaticMeshComponent")
+        local owner = fp.bottle:GetOwner()
+        if not (mesh and mesh:IsValid() and smcClass and smcClass:IsValid()
+                and owner and owner:IsValid()) then return end
+        local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
+                      Translation = { X = 0, Y = 0, Z = 0 },
+                      Scale3D = { X = 1, Y = 1, Z = 1 } }
+        local function spawnDot(scale)
+            local m = owner:AddComponentByClass(smcClass, true, idT, false)
+            if not (m and m:IsValid()) then return nil end
+            m:SetStaticMesh(mesh)
+            m:SetCollisionEnabled(0)
+            pcall(function() m:SetFirstPersonPrimitiveType(1) end)
+            m:K2_AttachToComponent(fp.anchor, FName(fp.boneName or "None"), 2, 2, 0, false)
+            m:SetRelativeScale3D(scale)
+            return m
+        end
+        fp.marker = spawnDot({ X = 0.06, Y = 0.06, Z = 0.06 })      -- mini bottle = bottle pivot
+        fp.handDot = spawnDot({ X = 0.5, Y = 0.5, Z = 0.04 })       -- flat disc = hand joint target
+        applyBottleTune()   -- snaps pivot dot onto the pivot; disc stays at the bone origin
+    end)
+end
+
+local function setTuneMode(on)
+    tuneMode = on
+    pcall(function()   -- trap WASD: block pawn movement while tuning
+        local pc = UEHelpers.GetPlayerController()
+        if on then pc:SetIgnoreMoveInput(true) else pc:ResetIgnoreMoveInput() end
+    end)
+    showPivotMarker(on)
+    log("TUNE MODE " .. (on
+        and "ON - movement locked | WASD move, PgUp/PgDn depth, arrows pitch/yaw, ,/. roll, -/= scale, V peek pivot, End fine"
+        or "OFF - movement restored"))
+    if on then logBottleOff("state:") end
+end
+
+RegisterKeyBind(Key.HOME, function()
+    ExecuteInGameThread(function() setTuneMode(not tuneMode) end)
+end)
+
+RegisterKeyBind(Key.END, function()
     ExecuteInGameThread(function()
-        axisIdx = axisIdx % #AXES + 1
-        logBottleOff("Ctrl+B axis ->")
+        fineStep = not fineStep
+        log("tune steps: " .. (fineStep and "FINE 0.5cm/5deg" or "coarse 2cm/15deg"))
     end)
 end)
 
-RegisterKeyBind(Key.UP_ARROW, { ModifierKey.CONTROL }, function()
-    ExecuteInGameThread(function()
-        local a = AXES[axisIdx]
-        bottleOff[a] = bottleOff[a] + ((a == "s") and 0.02 or 2)
-        applyBottleTune()
-        logBottleOff("nudge +:")
+local function tuneBind(key, fn)
+    RegisterKeyBind(key, function()
+        if not tuneMode then return end
+        ExecuteInGameThread(fn)
     end)
-end)
+end
 
-RegisterKeyBind(Key.DOWN_ARROW, { ModifierKey.CONTROL }, function()
-    ExecuteInGameThread(function()
-        local a = AXES[axisIdx]
-        bottleOff[a] = bottleOff[a] - ((a == "s") and 0.02 or 2)
-        applyBottleTune()
-        logBottleOff("nudge -:")
+tuneBind(Key.W, function() camNudge("up", 1) end)
+tuneBind(Key.S, function() camNudge("up", -1) end)
+tuneBind(Key.A, function() camNudge("right", -1) end)
+tuneBind(Key.D, function() camNudge("right", 1) end)
+tuneBind(Key.PAGE_UP, function() camNudge("fwd", -1) end)   -- toward camera
+tuneBind(Key.PAGE_DOWN, function() camNudge("fwd", 1) end)
+tuneBind(Key.UP_ARROW, function() rotNudge("ry", 1) end)
+tuneBind(Key.DOWN_ARROW, function() rotNudge("ry", -1) end)
+tuneBind(Key.LEFT_ARROW, function() rotNudge("rz", -1) end)
+tuneBind(Key.RIGHT_ARROW, function() rotNudge("rz", 1) end)
+tuneBind(Key.OEM_COMMA, function() rotNudge("rx", -1) end)
+tuneBind(Key.OEM_PERIOD, function() rotNudge("rx", 1) end)
+tuneBind(Key.OEM_MINUS, function()
+    bottleOff.s = math.max(0.02, bottleOff.s - (fineStep and 0.02 or 0.1))
+    applyBottleTune()
+    logBottleOff("scale-:")
+end)
+tuneBind(Key.OEM_PLUS, function()
+    bottleOff.s = bottleOff.s + (fineStep and 0.02 or 0.1)
+    applyBottleTune()
+    logBottleOff("scale+:")
+end)
+tuneBind(Key.V, function()
+    pcall(function()
+        if fp.bottle and fp.bottle:IsValid() then
+            fp.hiddenForPivot = not fp.hiddenForPivot
+            fp.bottle:SetVisibility(not fp.hiddenForPivot, false)
+            log("bottle " .. (fp.hiddenForPivot and "hidden - pivot dot + hand disc exposed" or "shown"))
+        end
     end)
 end)
 
