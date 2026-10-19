@@ -958,16 +958,23 @@ local function setTuneMode(on)
     if on then logBottleOff("state:") end
 end
 
-RegisterKeyBind(Key.HOME, function()
-    ExecuteInGameThread(function() setTuneMode(not tuneMode) end)
-end)
+-- Pose is baked (rig weld) — tuner mothballed. Flip true to re-enable Home/End
+-- and the tune keys; everything below stays intact but registers no keybinds.
+local TUNE_ENABLED = false
 
-RegisterKeyBind(Key.END, function()
-    fineStep = not fineStep
-    log("tune steps: " .. (fineStep and "FINE 0.5cm/5deg" or "coarse 2cm/15deg"))
-end)
+if TUNE_ENABLED then
+    RegisterKeyBind(Key.HOME, function()
+        ExecuteInGameThread(function() setTuneMode(not tuneMode) end)
+    end)
+
+    RegisterKeyBind(Key.END, function()
+        fineStep = not fineStep
+        log("tune steps: " .. (fineStep and "FINE 0.5cm/5deg" or "coarse 2cm/15deg"))
+    end)
+end
 
 local function tuneBind(key, fn)
+    if not TUNE_ENABLED then return end
     RegisterKeyBind(key, function()
         if not tuneMode then return end
         fn()   -- push-only; the tick hook does the real work on the game thread
