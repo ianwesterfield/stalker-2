@@ -134,14 +134,22 @@ end
 -- our kinematic actor bypasses the model, so StateData keeps saying "stationary").
 -- EAnimationStates: 0=None 1=Stand 2=Walking 3=Running 4=Sprinting 5=Crouch 6=LowCrouch 7=Jogging
 local function getAnim(a)
-    if drive.anim and drive.anim:IsValid() then return drive.anim end
     local ok, anim = pcall(function()
         local mesh = a.Mesh
         if not (mesh and mesh:IsValid()) then return nil end
         return mesh.AnimScriptInstance
     end)
-    drive.anim = (ok and anim and anim:IsValid()) and anim or nil
-    return drive.anim
+    anim = (ok and anim and anim:IsValid()) and anim or nil
+    -- hit reactions swap the instance; the old montage then points at freed memory
+    if anim and drive.anim then
+        local changed = true
+        pcall(function() changed = anim:GetAddress() ~= drive.anim:GetAddress() end)
+        if changed then drive.montage = nil end
+    elseif not anim then
+        drive.montage = nil
+    end
+    drive.anim = anim
+    return anim
 end
 
 -- Session 7: CMC accepts Velocity writes (mode 2) but never integrates — its tick is off.
@@ -330,6 +338,22 @@ local function onFrame()
     drive.tick = drive.tick + 1
     local cmc = a.CharacterMovement
     if not (cmc and cmc:IsValid()) then return end
+
+    -- explosion gate: kinematic writes + montages on a simulating (ragdolled) body
+    -- deref freed state in-engine — hold the drive until the puppet recovers
+    local simulating = false
+    pcall(function() simulating = a.Mesh:IsSimulatingPhysics() end)
+    if simulating then
+        if not drive.ragdolled then
+            drive.ragdolled = true
+            drive.montage, drive.anim = nil, nil
+            log("drive: puppet ragdolled - holding until it recovers")
+        end
+        return
+    elseif drive.ragdolled then
+        drive.ragdolled = nil
+        log("drive: puppet recovered - resuming")
+    end
 
     if drive.mode == "ghost" then
         ghostTick(a, cmc)

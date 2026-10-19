@@ -139,6 +139,40 @@ local function sameObj(a, b)
     return ok2 and r2
 end
 
+local BURN_RADIUS = 650   -- matches ExplosionMolotov ConcussionRadius
+
+-- Engine's TIMED detonation applies cfg ConcussionEffects; manual Explode() bypasses
+-- that wrapper (NPCs flinched but never ignited) — so burn them via the cheat shard.
+local function igniteNearby(x, y, z)
+    local rk
+    for _, o in ipairs(FindAllOf("CustomConsoleManagerRK") or {}) do
+        if o:IsValid() and not o:GetFullName():find("Default__") then rk = o break end
+    end
+    local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+    if not (rk and cm and cm:IsValid()) then log("ignite: no RK shard/CppMediator") return end
+    local pawn
+    pcall(function()
+        local pc = UEHelpers.GetPlayerController()
+        if pc and pc:IsValid() then pawn = pc.Pawn end
+    end)
+    local applied = 0
+    for _, npc in ipairs(FindAllOf("Obj") or {}) do   -- Obj = native character base (ZoneLink-proven)
+        pcall(function()
+            if not npc:IsValid() or npc:GetFullName():find("Default__") then return end
+            if pawn and pawn:IsValid() and npc:GetAddress() == pawn:GetAddress() then return end
+            local loc = npc:K2_GetActorLocation()
+            local dx, dy, dz = loc.X - x, loc.Y - y, loc.Z - z
+            if dx * dx + dy * dy + dz * dz > BURN_RADIUS * BURN_RADIUS then return end
+            local uid = cm:GetGUID(npc)
+            if type(uid) == "number" and uid ~= 0 then
+                rk:XApplyEffectOnNPCByUID("MolotovBurning", uid)
+                applied = applied + 1
+            end
+        end)
+    end
+    log(string.format("ignite: MolotovBurning applied to %d NPC(s)", applied))
+end
+
 local function detonate(t, grenade, x, y, z, how)
     if t.detonated then return end
     t.detonated = true
@@ -152,6 +186,8 @@ local function detonate(t, grenade, x, y, z, how)
     log(string.format("BOOM (%s) at %.0f %.0f %.0f", how, x, y, z))
     local okF, errF = pcall(spawnGroundFire, x, y, z, t.hx, t.hy)
     if not okF then log("FIRE handler error: " .. tostring(errF)) end
+    local okI, errI = pcall(igniteNearby, x, y, z)
+    if not okI then log("ignite error: " .. tostring(errI)) end
 end
 
 local okHit, errHit = pcall(function()
