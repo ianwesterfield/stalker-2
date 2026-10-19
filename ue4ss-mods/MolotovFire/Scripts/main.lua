@@ -129,6 +129,57 @@ LoopAsync(1000, function()
     return false
 end)
 
+-- Impact detonation: glass breaks on contact. Native Grenade:OnHit (dump-verified
+-- UFunction, classic hit signature) fires on any blocking contact; Explode() is the
+-- on-demand boom. The cfg TimeToExplode (6s) is an engine-side failsafe only.
+local function sameObj(a, b)
+    local ok, r = pcall(function() return a:GetAddress() == b:GetAddress() end)
+    if ok then return r end
+    local ok2, r2 = pcall(function() return a:GetFullName() == b:GetFullName() end)
+    return ok2 and r2
+end
+
+local function detonate(t, grenade, x, y, z, how)
+    if t.detonated then return end
+    t.detonated = true
+    if t.alive then
+        t.alive = false
+        trackedCount = trackedCount - 1
+    end
+    pcall(function()
+        if grenade and grenade:IsValid() then grenade:Explode() end
+    end)
+    log(string.format("BOOM (%s) at %.0f %.0f %.0f", how, x, y, z))
+    local okF, errF = pcall(spawnGroundFire, x, y, z, t.hx, t.hy)
+    if not okF then log("FIRE handler error: " .. tostring(errF)) end
+end
+
+local okHit, errHit = pcall(function()
+    RegisterHook("/Script/Stalker2.Grenade:OnHit", function(selfParam, _, _, _, hitParam)
+        pcall(function()
+            if trackedCount == 0 then return end
+            local g = selfParam:get()
+            local sid = ""
+            pcall(function() sid = tostring(g.SID) end)
+            if not sid:find("Molotov") then return end   -- real grenades keep their timers
+            for _, t in ipairs(tracked) do
+                if t.alive and t.armed and not t.detonated and sameObj(t.actor, g) then
+                    local ix, iy, iz
+                    pcall(function()
+                        local hit = hitParam:get()
+                        local p = hit.ImpactPoint or hit.Location
+                        ix, iy, iz = p.X, p.Y, p.Z
+                    end)
+                    detonate(t, g, ix or t.x, iy or t.y, iz or t.z, "impact")
+                    return
+                end
+            end
+        end)
+    end)
+end)
+log(okHit and "impact hook armed on Grenade:OnHit"
+    or ("impact hook FAILED (fuse fallback only): " .. tostring(errHit)))
+
 NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", function(grenade)
     tracked[#tracked + 1] = { actor = grenade, x = 0, y = 0, z = 0, alive = true, seen = 0 }
     trackedCount = trackedCount + 1
@@ -178,13 +229,9 @@ LoopAsync(100, function()
         for _, t in ipairs(tracked) do
             if t.alive then
                 local ok = pcall(function()
-                    -- fuse timer beats GC: actors linger ~1min after the boom
+                    -- fallback fuse: soft landings (water/bushes) may never fire OnHit
                     if t.armed and os.clock() >= t.boomAt then
-                        t.alive = false
-                        trackedCount = trackedCount - 1
-                        log(string.format("BOOM (fuse) at %.0f %.0f %.0f", t.x, t.y, t.z))
-                        local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z, t.hx, t.hy)
-                        if not okF then log("FIRE handler error: " .. tostring(errF)) end
+                        detonate(t, t.actor, t.x, t.y, t.z, "fuse fallback")
                         return
                     end
                     if t.actor:IsValid() then
@@ -206,8 +253,9 @@ LoopAsync(100, function()
                                 -- >120cm between 100ms reads = 12 m/s: throws hit ~15-25, sprint ~7
                                 if not t.armed and h2 + dz * dz > 120 * 120 then
                                     t.armed = true
-                                    t.boomAt = os.clock() + 1.25   -- TimeToExplode=1.2f from release
-                                    log("thrown - fuse lit")
+                                    -- fallback only; a 45-deg lob at 20 m/s flies ~3s
+                                    t.boomAt = os.clock() + 3.5
+                                    log("thrown - impact watch armed")
                                 end
                             end
                             t.x, t.y, t.z = loc.X, loc.Y, loc.Z
@@ -219,8 +267,9 @@ LoopAsync(100, function()
                     else
                         t.alive = false
                         trackedCount = trackedCount - 1
-                        if t.armed then
+                        if t.armed and not t.detonated then
                             -- died mid-fuse = engine detonated it; last position is ground zero
+                            t.detonated = true
                             log(string.format("BOOM (actor died) at %.0f %.0f %.0f", t.x, t.y, t.z))
                             local okF, errF = pcall(spawnGroundFire, t.x, t.y, t.z, t.hx, t.hy)
                             if not okF then log("FIRE handler error: " .. tostring(errF)) end
