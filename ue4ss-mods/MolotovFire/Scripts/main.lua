@@ -420,9 +420,37 @@ local function pickHandBone(mesh, fallback)
     return hands[1]
 end
 
+-- The pose is authored relative to the WRIST (jnt_r_hand) but the bottle must RIDE
+-- a fist bone: gait rotates the wrist, and rotation x the ~30cm wrist->fist lever
+-- bobbed the bottle in step cadence while the (steady) fist barely moves.
+local GRIP_BONES = { "jnt_r_hand_middle_01", "jnt_r_hand_middle_meta" }
+
+local function attachWrist()   -- snap back to the authoring frame (zero relative)
+    fp.bottle:K2_AttachToComponent(fp.anchor, FName(fp.boneName or "None"), 2, 2, 0, false)
+end
+
+local function regrip()   -- KeepWorld re-attach: same world pose, short fist lever
+    pcall(function()
+        if not (fp.bottle and fp.bottle:IsValid() and fp.anchor and fp.anchor:IsValid()) then return end
+        local grip
+        for _, b in ipairs(GRIP_BONES) do
+            if fp.anchor:DoesSocketExist(FName(b)) then grip = b break end
+        end
+        if not grip then return end
+        fp.bottle:K2_AttachToComponent(fp.anchor, FName(grip), 1, 1, 1, false)
+        if not fp.gripLogged then
+            fp.gripLogged = true
+            local rl, rr = fp.bottle.RelativeLocation, fp.bottle.RelativeRotation
+            log(string.format("FP: riding %s rel %.1f %.1f %.1f rot %.1f %.1f %.1f",
+                grip, rl.X, rl.Y, rl.Z, rr.Pitch, rr.Yaw, rr.Roll))
+        end
+    end)
+end
+
 local function applyBottleTune()
     pcall(function()
         if fp.bottle and fp.bottle:IsValid() then
+            if fp.anchor and fp.anchor:IsValid() then attachWrist() end
             local bl = fp.baseLoc or { x = 0, y = 0, z = 0 }
             local br = fp.baseRot or { p = 0, yaw = 0, r = 0 }
             local rot = { Pitch = br.p + bottleOff.ry, Yaw = br.yaw + bottleOff.rz, Roll = br.r + bottleOff.rx }
@@ -443,6 +471,7 @@ local function applyBottleTune()
             if fp.marker and fp.marker:IsValid() then   -- marker = the grip/mid point
                 fp.marker:K2_SetRelativeLocation({ X = tx, Y = ty, Z = tz }, false, {}, false)
             end
+            regrip()
         end
     end)
 end
@@ -465,6 +494,7 @@ local function sampleGrenadeBase(tag)
     end
     local ok, err = pcall(function()
         if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()) then return end
+        attachWrist()   -- readback below must be wrist-relative (authoring frame)
         local gl = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
         local gr = fp.mesh:GetSocketRotation(FName("jnt_wpn_rgd5"))
         fp.bottle:K2_SetWorldLocationAndRotation(
@@ -557,6 +587,7 @@ local function fpRestore()
     fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
     fp.anchor, fp.boneName, fp.baseLoc, fp.baseRot = nil, nil, nil, nil
     fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal, fp.rag = nil, nil, nil, nil, nil, nil
+    fp.gripLogged = nil
 end
 
 local function mainHandSID()
