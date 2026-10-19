@@ -251,10 +251,10 @@ local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 --   End = fine steps. Deltas ride the auto grenade-matched base pose and move the
 --   bottle's MID-BODY: the mesh pivot sits at the bottle BASE, so each apply solves
 --   the location that puts the bounds CENTER (not the pivot) on base+delta.
--- RECONSTRUCTION: x/y/z = the user-verified in-fist point from the base-pivot era;
--- rx-90 = the approved orientation. Center pinned there closes the old half-bottle
--- gap along the bottle's own axis. s=0.5 reads hand-proportional with mid-in-fist.
-local bottleOff = { s = 0.5, x = 17.8, y = 21.1, z = 0.8, rx = -90, ry = 0, rz = 0 }
+-- RECONSTRUCTION: deltas are now zero — the live grenade-match base IS the grip
+-- point (bounds center pinned on jnt_wpn_rgd5); rx-90 = the approved orientation,
+-- s=0.5 reads hand-proportional. Tune from here with HOME and bake the result.
+local bottleOff = { s = 0.5, x = 0, y = 0, z = 0, rx = -90, ry = 0, rz = 0 }
 local tuneMode, fineStep = false, false
 local showPivotMarker   -- fwd-declared; defined with the tuner keys below
 
@@ -364,8 +364,8 @@ end
 -- Live grenade-match v3: re-base per frame from a native RegisterHook (game thread,
 -- registered once — the old LoopAsync(16)+ExecuteInGameThread approach queued fresh
 -- Lua registry refs 60x/sec and raced UE4SS's callback GC = access violation).
--- Preferred source: the grenade AnimBP's own update event (absent in 2.0.x); fallback:
--- the HUD stat-panel widget Tick — ZoneLink-proven to fire natively every frame.
+-- Source: HUD stat-panel widget Tick (ZoneLink-proven, fires natively every frame);
+-- the grenade AnimBP owns only AnimGraph (dump-verified) — nothing to hook there.
 local function trackTick()
     if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
             and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
@@ -391,28 +391,21 @@ end
 
 local HUD_TICK_HOOK = "/Game/GameLite/FPS_Game/UIRemaster/HUD/StatPanel/W_UpdatedStatPanel.W_UpdatedStatPanel_C:Tick"
 local trackHooked, trackHookLogged = false, false
-local function hookGrenadeTick()   -- call once classes are loaded (at equip; HUD is up)
+local function hookGrenadeTick()
+    -- MUST be called from main-state context (notify/keybind callback): registering
+    -- from the async state stores a dead ref -> "Ref was not function", no tracking
     if trackHooked then return end
-    local ok = pcall(function()
-        RegisterHook(FP_ANIM_PATH .. ":BlueprintUpdateAnimation", function()
-            pcall(trackTick)
+    local ok, err = pcall(function()
+        RegisterHook(HUD_TICK_HOOK, function()
+            if fp.bottle then pcall(trackTick) end
         end)
     end)
-    local src = "grenade AnimBP tick"
-    if not ok then
-        src = "HUD stat-panel Tick"
-        ok = pcall(function()
-            RegisterHook(HUD_TICK_HOOK, function()
-                if fp.bottle then pcall(trackTick) end
-            end)
-        end)
-    end
     trackHooked = ok
     if trackHooked then
-        log("FP: live grenade-path tracking via " .. src)
+        log("FP: live grenade-path tracking via HUD stat-panel Tick")
     elseif not trackHookLogged then
         trackHookLogged = true
-        log("FP: no per-frame hook available - static grenade-match base only")
+        log("FP: HUD tick hook failed (" .. tostring(err) .. ") - static base only")
     end
 end
 
@@ -535,7 +528,6 @@ fpSwap = function(anim, attempt)
                 fp.bottle, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 fp.anchor, fp.boneName = target, bone
                 sampleGrenadeBase("equip")
-                hookGrenadeTick()
                 if tuneMode and showPivotMarker then showPivotMarker(true) end
                 -- flaming rag POC: dump-verified lamp/candle flame parked at the neck;
                 -- child of the bottle comp so it inherits scale and rides the tune
@@ -555,7 +547,7 @@ fpSwap = function(anim, attempt)
                     if not (ns and ns:IsValid()) then log("FP: rag - no fire asset loadable") return end
                     local rag = owner:AddComponentByClass(ncClass, true, idT, false)
                     if not (rag and rag:IsValid()) then log("FP: rag - AddComponentByClass failed") return end
-                    rag:SetAsset(ns)
+                    rag:SetAsset(ns, true)   -- UE5.5: 2nd param = bResetExistingOverrideParameters
                     pcall(function() rag:SetFirstPersonPrimitiveType(1) end)
                     rag:K2_AttachToComponent(comp, FName("None"), 2, 2, 0, false)
                     rag:K2_SetRelativeLocation(
@@ -581,6 +573,7 @@ fpSwap = function(anim, attempt)
 end
 
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+    hookGrenadeTick()   -- main-state context; HUD widget class is loaded once hands are up
     fpSwap(anim, 1)
 end)
 
