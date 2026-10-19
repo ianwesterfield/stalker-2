@@ -456,7 +456,9 @@ local function applyBottleTune()
             local rot = { Pitch = br.p + bottleOff.ry, Yaw = br.yaw + bottleOff.rz, Roll = br.r + bottleOff.rx }
             -- grip target in bone space; the bottle's bounds CENTER goes here, which
             -- cancels out the mesh pivot sitting at the bottle's base
-            local tx, ty, tz = bl.x + bottleOff.x, bl.y + bottleOff.y, bl.z + bottleOff.z
+            local dx, dy, dz = bottleOff.x, bottleOff.y, bottleOff.z
+            if fp.liveFollow then dx, dy, dz = 0, 0, 0 end   -- windup rides the rig bone itself
+            local tx, ty, tz = bl.x + dx, bl.y + dy, bl.z + dz
             local c = fp.midLocal or { x = 0, y = 0, z = 17 }
             local kml = StaticFindObject("/Script/Engine.Default__KismetMathLibrary")
             local fv = kml:GetForwardVector(rot)
@@ -484,8 +486,8 @@ end
 
 -- snap bottle to the in-hand grenade body bone, then store the resulting relative
 -- transform (on jnt_r_hand) as the base pose — tuner offsets are deltas from it
-local function sampleGrenadeBase(tag)
-    if lockedBase then   -- captured fidget pose wins over live sampling
+local function sampleGrenadeBase(tag, forceLive)
+    if lockedBase and not forceLive then   -- captured fidget pose wins over live sampling
         fp.baseLoc = { x = lockedBase.loc.x, y = lockedBase.loc.y, z = lockedBase.loc.z }
         fp.baseRot = { p = lockedBase.rot.p, yaw = lockedBase.rot.yaw, r = lockedBase.rot.r }
         if tag then log("FP: using LOCKED fidget base (" .. tag .. ")") end
@@ -517,31 +519,55 @@ end
 -- Lua registry refs 60x/sec and raced UE4SS's callback GC = access violation).
 -- Source: HUD stat-panel widget Tick (ZoneLink-proven, fires natively every frame);
 -- the grenade AnimBP owns only AnimGraph (dump-verified) — nothing to hook there.
-local function liveRebase()
+local function handGrenadeDistances()
     local g = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
     local function dist(bone)
         local h = fp.anchor:GetSocketLocation(FName(bone))
         local dx, dy, dz = g.X - h.X, g.Y - h.Y, g.Z - h.Z
         return math.sqrt(dx * dx + dy * dy + dz * dz)
     end
-    local dR = dist(fp.boneName or "jnt_r_hand")
-    local dL = dist("jnt_l_hand")
-    if math.min(dR, dL) > 35 then return end   -- locomotion desync rides the legs - hold last good base
-    if dL + 5 < dR then
-        if not fp.leftLogged then
-            fp.leftLogged = true
-            log(string.format("FP: grenade bone nearer LEFT hand (L %.0f vs R %.0f) - fidget hand-swap?", dL, dR))
-        end
-    elseif dR <= dL then
-        fp.leftLogged = nil
-    end
-    sampleGrenadeBase(nil)   -- quiet re-base; tuner deltas ride on top
+    return dist(fp.boneName or "jnt_r_hand"), dist("jnt_l_hand")
 end
 
 local function trackTick()
     if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
             and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
-    if not lockedBase then liveRebase() end
+    local okD, dR, dL = pcall(handGrenadeDistances)
+    if okD and dR then
+        local d = math.min(dR, dL)
+        fp.tickN = (fp.tickN or 0) + 1
+        if fp.tickN % 240 == 0 then   -- threshold instrumentation (~every 4s)
+            log(string.format("FP: d=%.0f%s", d, fp.liveFollow and " (follow)" or ""))
+        end
+        if lockedBase then
+            -- WINDUP: the FP grenade rig diverges from the body hand in world space
+            -- (rig authored for the warped FP view) — ride the rig through the swing,
+            -- hold the baked fist pose otherwise (idle fidgets + locomotion desync)
+            if fp.liveFollow then
+                if d < 25 or d > 60 then
+                    fp.liveFollow = nil
+                    log(string.format("FP: windup follow OFF (d=%.0f)", d))
+                    sampleGrenadeBase(nil)
+                else
+                    sampleGrenadeBase(nil, true)
+                end
+            elseif d > 28 and d <= 60 then
+                fp.liveFollow = true
+                log(string.format("FP: windup follow ON (d=%.0f)", d))
+                sampleGrenadeBase(nil, true)
+            end
+        elseif d <= 35 then   -- unlocked live mode: hold last base past the desync gate
+            if dL + 5 < dR then
+                if not fp.leftLogged then
+                    fp.leftLogged = true
+                    log(string.format("FP: grenade bone nearer LEFT hand (L %.0f vs R %.0f) - fidget hand-swap?", dL, dR))
+                end
+            elseif dR <= dL then
+                fp.leftLogged = nil
+            end
+            sampleGrenadeBase(nil)   -- quiet re-base; tuner deltas ride on top
+        end
+    end
     if consumeNudges then consumeNudges() end
 end
 
@@ -587,7 +613,7 @@ local function fpRestore()
     fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
     fp.anchor, fp.boneName, fp.baseLoc, fp.baseRot = nil, nil, nil, nil
     fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal, fp.rag = nil, nil, nil, nil, nil, nil
-    fp.gripLogged = nil
+    fp.gripLogged, fp.liveFollow, fp.tickN = nil, nil, nil
 end
 
 local function mainHandSID()
