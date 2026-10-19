@@ -353,13 +353,17 @@ local fp = {}   -- bottle comp + hands mesh + anim full-name while swapped
 --   End = fine steps. Deltas ride the auto grenade-matched base pose and move the
 --   bottle's MID-BODY: the mesh pivot sits at the bottle BASE, so each apply solves
 --   the location that puts the bounds CENTER (not the pivot) on base+delta.
--- RECONSTRUCTION: deltas are now zero — the live grenade-match base IS the grip
--- point (bounds center pinned on jnt_wpn_rgd5); rx-90 = the approved orientation,
--- s=0.5 reads hand-proportional. Tune from here with HOME and bake the result.
-local bottleOff = { s = 0.5, x = 0, y = 0, z = 0, rx = -90, ry = 0, rz = 0 }
+-- BAKED 2026-10-19 (user-approved in-fist pose: neck out between the fingers):
+-- deltas ride the baked locked base below — together they form one constant
+-- hand-relative transform, so the bottle is rigid on jnt_r_hand (no fidget swim).
+local bottleOff = { s = 0.4, x = 0.4, y = -9.8, z = -9.1, rx = -90, ry = 0, rz = -60 }
 local tuneMode, fineStep = false, false
 local showPivotMarker   -- fwd-declared; defined with the tuner keys below
-local lockedBase        -- K in tune mode: freeze base at the current fidget pose
+-- baked fidget-pose base (K in tune mode re-locks/unlocks live tracking)
+local lockedBase = {
+    loc = { x = -12.0, y = -0.9, z = -18.1 },
+    rot = { p = 28.1, yaw = 29.6, r = -114.3 },
+}
 local consumeNudges     -- fwd-declared; tuner intents run inside the tick hook
 -- keybind handlers push plain data only — UObject calls from rapid
 -- ExecuteInGameThread keypresses raced the tick hook inside UE4SS (AV at 0x36)
