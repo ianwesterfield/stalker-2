@@ -361,10 +361,11 @@ local function sampleGrenadeBase(tag)
     applyBottleTune()
 end
 
--- Live grenade-match, v2: re-base from INSIDE the grenade AnimBP's own update event.
--- RegisterHook is registered once and runs natively on the game thread every anim
--- tick — the old LoopAsync(16)+ExecuteInGameThread version queued a fresh Lua registry
--- ref 60x/sec and raced UE4SS's callback GC (access violation in UE4SS.dll).
+-- Live grenade-match v3: re-base per frame from a native RegisterHook (game thread,
+-- registered once — the old LoopAsync(16)+ExecuteInGameThread approach queued fresh
+-- Lua registry refs 60x/sec and raced UE4SS's callback GC = access violation).
+-- Preferred source: the grenade AnimBP's own update event (absent in 2.0.x); fallback:
+-- the HUD stat-panel widget Tick — ZoneLink-proven to fire natively every frame.
 local function trackTick()
     if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
             and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
@@ -388,20 +389,30 @@ local function trackTick()
     sampleGrenadeBase(nil)   -- quiet re-base; tuner deltas ride on top
 end
 
+local HUD_TICK_HOOK = "/Game/GameLite/FPS_Game/UIRemaster/HUD/StatPanel/W_UpdatedStatPanel.W_UpdatedStatPanel_C:Tick"
 local trackHooked, trackHookLogged = false, false
-local function hookGrenadeTick()   -- call once the AnimBP class is loaded (at equip)
+local function hookGrenadeTick()   -- call once classes are loaded (at equip; HUD is up)
     if trackHooked then return end
-    local ok, err = pcall(function()
+    local ok = pcall(function()
         RegisterHook(FP_ANIM_PATH .. ":BlueprintUpdateAnimation", function()
             pcall(trackTick)
         end)
     end)
+    local src = "grenade AnimBP tick"
+    if not ok then
+        src = "HUD stat-panel Tick"
+        ok = pcall(function()
+            RegisterHook(HUD_TICK_HOOK, function()
+                if fp.bottle then pcall(trackTick) end
+            end)
+        end)
+    end
     trackHooked = ok
     if trackHooked then
-        log("FP: live tracking hooked to grenade AnimBP tick")
+        log("FP: live grenade-path tracking via " .. src)
     elseif not trackHookLogged then
         trackHookLogged = true
-        log("FP: AnimBP has no BlueprintUpdateAnimation event - static grenade-match base only")
+        log("FP: no per-frame hook available - static grenade-match base only")
     end
 end
 
@@ -443,9 +454,10 @@ local function mainHandSID()
     return sid
 end
 
-NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+local fpSwap   -- fwd-decl: equip swap retries while rig socket names are unreadable
+fpSwap = function(anim, attempt)
     -- let the game finish wiring mesh+anim before restyling it
-    ExecuteWithDelay(150, function()
+    ExecuteWithDelay(attempt == 1 and 150 or 400, function()
         ExecuteInGameThread(function()
             local ok, err = pcall(function()
                 if not (anim and anim:IsValid()) then return end
@@ -501,6 +513,18 @@ NotifyOnNewObject(FP_ANIM_PATH, function(anim)
                 if not target then   -- fallback: old grenade-bone attach
                     target, bone = mesh, pickGrenadeBone(mesh)
                 end
+                if not bone or bone == "None" then
+                    -- unreadable socket names = attach lands on a rigid comp root (the
+                    -- levitating-bottle failure); give the rig time to wire and retry
+                    pcall(function() comp:K2_DestroyComponent(comp) end)
+                    if attempt < 4 then
+                        log(string.format("FP: bones unreadable (attempt %d) - retrying", attempt))
+                        fpSwap(anim, attempt + 1)
+                    else
+                        log("FP: bones never resolved - swap skipped (grenade stays visible)")
+                    end
+                    return
+                end
                 -- hidden skel meshes stop ticking; keep grenade rig posed so we can sample it
                 pcall(function()
                     fp.prevTick = mesh.VisibilityBasedAnimTickOption
@@ -554,6 +578,10 @@ NotifyOnNewObject(FP_ANIM_PATH, function(anim)
             if not ok then log("FP swap ERR: " .. tostring(err)) end
         end)
     end)
+end
+
+NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+    fpSwap(anim, 1)
 end)
 
 -- Un-swap when the hands anim changes (lowered / thrown / weapon switched).
@@ -594,8 +622,10 @@ RegisterKeyBind(Key.F7, function()
         local build = liveInstance("CustomConsoleManagerBuild")
         log("CCM Build instance: " .. tostring(build ~= nil))
         if build then
-            local ok, err = pcall(function() build:XSpawnItemNearPlayerBySID("GrenadeMolotov") end)
-            log("XSpawnItemNearPlayerBySID GrenadeMolotov -> " .. (ok and "called" or tostring(err)))
+            for _, sid in ipairs({ "Vodka", "GrenadeMolotov" }) do
+                local ok, err = pcall(function() build:XSpawnItemNearPlayerBySID(sid) end)
+                log("XSpawnItemNearPlayerBySID " .. sid .. " -> " .. (ok and "called" or tostring(err)))
+            end
         end
         local rk = liveInstance("CustomConsoleManagerRK")
         log("CCM RK instance: " .. tostring(rk ~= nil))
