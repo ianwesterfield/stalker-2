@@ -779,24 +779,82 @@ end
 -- grenade skeleton, from the ZoneGrenades asset plugin) renders in-hand natively now.
 local FP_SWAP_ENABLED = false
 
+-- Flame-only path: the visible weapon mesh IS the bottle now, so the rag flame
+-- attaches straight to its grenade bone — no spawn/weld/track machinery.
+local FLAME_ENABLED = true
+local FLAME_Z = 26   -- bone -> bottle-neck offset; tune if flame floats/sinks
+local function fpFlame(anim)
+    ExecuteWithDelay(300, function()
+        ExecuteInGameThread(function()
+            local ok, err = pcall(function()
+                if not (anim and anim:IsValid()) then return end
+                local sid = mainHandSID()
+                if not (sid:find("Molotov") or sid == "unreadable") then return end
+                local mesh
+                pcall(function() mesh = anim:GetOwningComponent() end)
+                if not (mesh and mesh:IsValid()) then
+                    pcall(function() mesh = anim:GetOuter() end)
+                end
+                if not (mesh and mesh:IsValid()) then log("FP: no hands mesh for flame") return end
+                fpRestore()
+                local owner = mesh:GetOwner()
+                local ncClass = StaticFindObject("/Script/Niagara.NiagaraComponent")
+                if not (ncClass and ncClass:IsValid() and owner and owner:IsValid()) then
+                    log("FP: flame prereqs missing")
+                    return
+                end
+                local ns, nsPath
+                for _, p in ipairs({
+                    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Kerosene_2.NS_Fire_Kerosene_2",
+                    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle_2.NS_Fire_Candle_2",
+                    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle.NS_Fire_Candle",
+                }) do
+                    ns = StaticFindObject(p)
+                    if not (ns and ns:IsValid()) then ns = LoadAsset(p) end
+                    if ns and ns:IsValid() then nsPath = p break end
+                end
+                if not (ns and ns:IsValid()) then log("FP: flame - no fire asset loadable") return end
+                local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
+                              Translation = { X = 0, Y = 0, Z = 0 },
+                              Scale3D = { X = 1, Y = 1, Z = 1 } }
+                local rag = owner:AddComponentByClass(ncClass, true, idT, false)
+                if not (rag and rag:IsValid()) then log("FP: flame - AddComponentByClass failed") return end
+                rag:SetAsset(ns, true)
+                pcall(function() rag:SetFirstPersonPrimitiveType(1) end)   -- 1 = FirstPerson
+                local bone = pickGrenadeBone(mesh)
+                rag:K2_AttachToComponent(mesh, FName(bone or "None"), 2, 2, 0, false)
+                rag:K2_SetRelativeLocation({ X = 0, Y = 0, Z = FLAME_Z }, false, {}, false)
+                pcall(function() rag:Activate(true) end)
+                fp.rag, fp.mesh, fp.animName = rag, mesh, anim:GetFullName()
+                log("FP: rag flame lit on " .. tostring(bone) .. " (" .. nsPath:match("([^/]+)$") .. ")")
+            end)
+            if not ok then log("FP flame ERR: " .. tostring(err)) end
+        end)
+    end)
+end
+
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
-    if not FP_SWAP_ENABLED then return end
-    hookGrenadeTick()   -- main-state context; HUD widget class is loaded once hands are up
-    fpSwap(anim, 1)
+    if FP_SWAP_ENABLED then
+        hookGrenadeTick()   -- main-state context; HUD widget class is loaded once hands are up
+        fpSwap(anim, 1)
+    elseif FLAME_ENABLED then
+        fpFlame(anim)
+    end
 end)
 
 -- Un-swap when the hands anim changes (lowered / thrown / weapon switched).
 LoopAsync(500, function()
-    if not fp.bottle then return false end
+    if not (fp.bottle or fp.rag) then return false end
     ExecuteInGameThread(function()
         local keep = false
         pcall(function()
-            if fp.mesh:IsValid() and fp.bottle:IsValid() then
+            local comp = fp.bottle or fp.rag
+            if fp.mesh:IsValid() and comp:IsValid() then
                 local cur = fp.mesh.AnimScriptInstance
                 keep = cur and cur:IsValid() and cur:GetFullName() == fp.animName
             end
         end)
-        if fp.bottle and not keep then
+        if (fp.bottle or fp.rag) and not keep then
             log("FP: hands changed - bottle away")
             fpRestore()
         end
