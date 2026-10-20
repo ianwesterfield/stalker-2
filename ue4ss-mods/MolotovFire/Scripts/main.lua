@@ -775,7 +775,12 @@ fpSwap = function(anim, attempt)
     end)
 end
 
+-- FP swap mothballed: MeshPrototypeSID = MolotovBottle_Skeletal (cooked SK bottle on the
+-- grenade skeleton, from the ZoneGrenades asset plugin) renders in-hand natively now.
+local FP_SWAP_ENABLED = false
+
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+    if not FP_SWAP_ENABLED then return end
     hookGrenadeTick()   -- main-state context; HUD widget class is loaded once hands are up
     fpSwap(anim, 1)
 end)
