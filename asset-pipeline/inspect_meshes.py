@@ -5,16 +5,30 @@ import os
 
 EXPORTS = r"C:\Tools\FModel\Output\Exports"
 TARGETS = [
-    (r"Stalker2\Content\_STALKER2\SkeletalMeshes\weapons\grenades\RGD5\SK_RGD5.glb", "SK_RGD5"),
-    (r"Stalker2\Mods\ZoneGrenades\Content\Meshes\SK_ZoneGrenadeBottle.glb", "SK_ZoneGrenadeBottle"),
-    (r"Stalker2\Content\_Stalker_2\items\consumable\SM_cns_cossacks_vodka_01_c.glb", "SM_cossacks_vodka"),
+    (
+        r"Stalker2\Content\_STALKER2\SkeletalMeshes\weapons\grenades\RGD5\SK_RGD5.glb",
+        "SK_RGD5",
+    ),
+    (
+        r"Stalker2\Mods\ZoneGrenades\Content\Meshes\SK_ZoneGrenadeBottle.glb",
+        "SK_ZoneGrenadeBottle",
+    ),
+    (
+        r"Stalker2\Content\_Stalker_2\items\consumable\SM_cns_cossacks_vodka_01_c.glb",
+        "SM_cossacks_vodka",
+    ),
 ]
 
 
 def clear_scene():
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
-    for block in (bpy.data.meshes, bpy.data.armatures, bpy.data.materials, bpy.data.images):
+    for block in (
+        bpy.data.meshes,
+        bpy.data.armatures,
+        bpy.data.materials,
+        bpy.data.images,
+    ):
         for item in list(block):
             if item.users == 0:
                 block.remove(item)
@@ -50,7 +64,9 @@ def dump_mesh(obj):
                 weights.setdefault(name, []).append(g.weight)
         for name, n in sorted(counts.items(), key=lambda kv: -kv[1]):
             w = weights[name]
-            print(f"    vgroup '{name}': {n} verts, weight min={min(w):.3f} max={max(w):.3f}")
+            print(
+                f"    vgroup '{name}': {n} verts, weight min={min(w):.3f} max={max(w):.3f}"
+            )
     else:
         print("    (no vertex groups)")
 
