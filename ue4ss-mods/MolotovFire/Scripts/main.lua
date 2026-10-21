@@ -777,7 +777,9 @@ local FP_SWAP_ENABLED = false
 
 -- Flame-only path: the visible weapon mesh IS the bottle now, so the rag flame
 -- attaches straight to its grenade bone — no spawn/weld/track machinery.
-local FLAME_ENABLED = true
+-- Mothballed with FP swap: bone-space fire never renders right; rag/flame belongs
+-- in the authored SK asset (Zone Kit), not runtime attachment.
+local FLAME_ENABLED = false
 -- hand-bone-local offset; origin sits at the grip = bottle base, so the neck is
 -- somewhere off-axis — tune live with arrows/PgUp/PgDn and bake the logged values
 local FLAME_OFF = { X = 0, Y = 0, Z = 26 }
