@@ -117,15 +117,6 @@ wrap.name = "rag_wrap"
 wrap.scale.z = 1.4  # fatter vertically, like wrapped cloth
 rag_parts.append(wrap)
 
-# --- wick: cloth plug protruding from the mouth ---
-bpy.ops.mesh.primitive_cylinder_add(
-    radius=0.007, depth=0.035, vertices=10,
-    location=(cx, cy + 0.002, top_z + 0.008), calc_uvs=True)
-wick = bpy.context.active_object
-wick.name = "rag_wick"
-wick.rotation_euler = (math.radians(12), 0, 0)  # slight lean
-rag_parts.append(wick)
-
 # --- hanging tail strip, built by hand with UVs ---
 segs, width0, width1, length = 12, 0.022, 0.011, 0.085
 mesh = bpy.data.meshes.new("rag_tail")
