@@ -7,9 +7,17 @@ import os
 from mathutils import Vector
 
 EXPORTS = r"C:\Tools\FModel\Output\Exports"
-RGD5_GLB = os.path.join(EXPORTS, r"Stalker2\Content\_STALKER2\SkeletalMeshes\weapons\grenades\RGD5\SK_RGD5.glb")
-ZG_GLB = os.path.join(EXPORTS, r"Stalker2\Mods\ZoneGrenades\Content\Meshes\SK_ZoneGrenadeBottle.glb")
-SM_GLB = os.path.join(EXPORTS, r"Stalker2\Content\_Stalker_2\items\consumable\SM_cns_cossacks_vodka_01_c.glb")
+RGD5_GLB = os.path.join(
+    EXPORTS,
+    r"Stalker2\Content\_STALKER2\SkeletalMeshes\weapons\grenades\RGD5\SK_RGD5.glb",
+)
+ZG_GLB = os.path.join(
+    EXPORTS, r"Stalker2\Mods\ZoneGrenades\Content\Meshes\SK_ZoneGrenadeBottle.glb"
+)
+SM_GLB = os.path.join(
+    EXPORTS,
+    r"Stalker2\Content\_Stalker_2\items\consumable\SM_cns_cossacks_vodka_01_c.glb",
+)
 OUT_DIR = r"c:\Code\westerfield.cloud\Gaming\stalker-2\asset-pipeline\out"
 
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -47,7 +55,9 @@ bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
 zg_objs = import_glb(ZG_GLB)
 zg_mesh = next(o for o in zg_objs if o.type == "MESH" and "Bottle" in o.name)
 zg_lo, zg_hi = world_bbox(zg_mesh)
-print(f"ZG bottle bbox: lo=({zg_lo.x:.4f},{zg_lo.y:.4f},{zg_lo.z:.4f}) hi=({zg_hi.x:.4f},{zg_hi.y:.4f},{zg_hi.z:.4f})")
+print(
+    f"ZG bottle bbox: lo=({zg_lo.x:.4f},{zg_lo.y:.4f},{zg_lo.z:.4f}) hi=({zg_hi.x:.4f},{zg_hi.y:.4f},{zg_hi.z:.4f})"
+)
 for o in zg_objs:
     bpy.data.objects.remove(o, do_unlink=True)
 bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
@@ -60,14 +70,18 @@ for o in sm_objs:
         bpy.data.objects.remove(o, do_unlink=True)
 
 sm_lo, sm_hi = world_bbox(bottle)
-print(f"SM bottle bbox: lo=({sm_lo.x:.4f},{sm_lo.y:.4f},{sm_lo.z:.4f}) hi=({sm_hi.x:.4f},{sm_hi.y:.4f},{sm_hi.z:.4f})")
+print(
+    f"SM bottle bbox: lo=({sm_lo.x:.4f},{sm_lo.y:.4f},{sm_lo.z:.4f}) hi=({sm_hi.x:.4f},{sm_hi.y:.4f},{sm_hi.z:.4f})"
+)
 
 # align SM to ZG placement (xy centers, z bottoms)
-delta = Vector((
-    (zg_lo.x + zg_hi.x) / 2 - (sm_lo.x + sm_hi.x) / 2,
-    (zg_lo.y + zg_hi.y) / 2 - (sm_lo.y + sm_hi.y) / 2,
-    zg_lo.z - sm_lo.z,
-))
+delta = Vector(
+    (
+        (zg_lo.x + zg_hi.x) / 2 - (sm_lo.x + sm_hi.x) / 2,
+        (zg_lo.y + zg_hi.y) / 2 - (sm_lo.y + sm_hi.y) / 2,
+        zg_lo.z - sm_lo.z,
+    )
+)
 bottle.location += delta
 bpy.context.view_layer.update()
 print(f"aligned SM by delta ({delta.x:.4f},{delta.y:.4f},{delta.z:.4f})")
@@ -102,50 +116,95 @@ print("radius profile (bottom→top): " + " ".join(f"{r*1000:.0f}" for r in prof
 wrap_z = top_z - 0.030
 wrap_idx = min(slices - 1, int((wrap_z - lo.z) / height * slices))
 neck_r = max(prof[wrap_idx], 0.008)
-print(f"top_z={top_z:.4f} wrap_z={wrap_z:.4f} neck_r={neck_r*1000:.1f}mm max_r={max_r*1000:.1f}mm")
+print(
+    f"top_z={top_z:.4f} wrap_z={wrap_z:.4f} neck_r={neck_r*1000:.1f}mm max_r={max_r*1000:.1f}mm"
+)
 
 rag_mat = bpy.data.materials.new("MI_molotov_rag")
 rag_parts = []
 
-# --- rag wrap: knotted cloth around the neck ---
-bpy.ops.mesh.primitive_torus_add(
-    major_radius=neck_r + 0.0015, minor_radius=0.004,
-    major_segments=16, minor_segments=8,
-    location=(cx, cy, wrap_z), generate_uvs=True)
-wrap = bpy.context.active_object
-wrap.name = "rag_wrap"
-wrap.scale.z = 1.4  # fatter vertically, like wrapped cloth
-rag_parts.append(wrap)
+# --- rag plug: cloth stuffed into the mouth, bulging out ---
+bpy.ops.mesh.primitive_uv_sphere_add(
+    radius=0.0115,
+    segments=12,
+    ring_count=8,
+    location=(cx, cy, top_z + 0.002),
+    calc_uvs=True,
+)
+plug = bpy.context.active_object
+plug.name = "rag_plug"
+plug.scale = (1.0, 1.0, 0.6)  # squashed bulge, not a ball
+rag_parts.append(plug)
 
-# --- hanging tail strip, built by hand with UVs ---
-segs, width0, width1, length = 12, 0.022, 0.011, 0.085
+# --- hanging tail: draped grid following the bottle contour ---
+# fill gaps in the radius profile so any z can be sampled
+filled = prof[:]
+known = [i for i, r in enumerate(filled) if r > 0]
+for i in range(slices):
+    if filled[i] == 0:
+        lo_i = max((k for k in known if k < i), default=None)
+        hi_i = min((k for k in known if k > i), default=None)
+        if lo_i is None:
+            filled[i] = filled[hi_i]
+        elif hi_i is None:
+            filled[i] = filled[lo_i]
+        else:
+            f = (i - lo_i) / (hi_i - lo_i)
+            filled[i] = filled[lo_i] * (1 - f) + filled[hi_i] * f
+
+
+def radius_at(z):
+    idx = (z - lo.z) / height * slices
+    idx = min(slices - 1.001, max(0.0, idx))
+    i0 = int(idx)
+    f = idx - i0
+    return filled[i0] * (1 - f) + filled[min(i0 + 1, slices - 1)] * f
+
+
+segs, cols = 14, 5
+width0, width1, length = 0.026, 0.018, 0.115
+theta0, drift = 0.0, math.radians(35)  # slides around the bottle as it falls
+mouth_r = 0.006  # emerges from inside the mouth
+tail_top = top_z + 0.004
 mesh = bpy.data.meshes.new("rag_tail")
-verts, faces, uvs = [], [], []
+verts, faces = [], []
 for i in range(segs + 1):
     t = i / segs
+    z = tail_top - length * t
+    theta = theta0 + drift * t
+    radial = Vector((math.cos(theta), math.sin(theta), 0))
+    tangent = Vector((-math.sin(theta), math.cos(theta), 0))
+    gap = 0.003 + 0.004 * t * t  # hangs slightly off the glass toward the hem
+    # blend from inside the mouth out over the lip onto the glass
+    blend = min(1.0, t / 0.18)
+    r = mouth_r * (1 - blend) + (radius_at(min(z, top_z)) + gap) * blend
     w = (width0 * (1 - t) + width1 * t) / 2
-    sway = 0.006 * math.sin(t * math.pi * 1.5)
-    x = cx + neck_r + 0.004 + 0.010 * t + sway
-    z = wrap_z - length * t
-    verts.append((x, cy - w, z))
-    verts.append((x, cy + w, z))
+    for c in range(cols):
+        s = c / (cols - 1) * 2 - 1  # -1..1 across the strip
+        sag = 0.004 * (1 - s * s) * t  # middle bellies out as it falls
+        hem = 0.008 * t * abs(math.sin(s * 2.6 + 1.3))  # ragged bottom edge
+        p = Vector((cx, cy, z - hem)) + radial * (r + sag) + tangent * (w * s)
+        verts.append(tuple(p))
 for i in range(segs):
-    a = i * 2
-    faces.append((a, a + 1, a + 3, a + 2))
+    for c in range(cols - 1):
+        a = i * cols + c
+        faces.append((a, a + 1, a + cols + 1, a + cols))
 mesh.from_pydata(verts, [], faces)
 uv = mesh.uv_layers.new(name="UVMap")
 for poly in mesh.polygons:
     for li in poly.loop_indices:
         vi = mesh.loops[li].vertex_index
-        row, side = vi // 2, vi % 2
-        uv.data[li].uv = (side, 1 - row / segs)
+        row, col = vi // cols, vi % cols
+        uv.data[li].uv = (col / (cols - 1), 1 - row / segs)
 mesh.update()
 tail = bpy.data.objects.new("rag_tail", mesh)
 bpy.context.collection.objects.link(tail)
 solid = tail.modifiers.new("solid", "SOLIDIFY")
 solid.thickness = 0.002
 solid.offset = 0
-with bpy.context.temp_override(object=tail, active_object=tail, selected_objects=[tail]):
+with bpy.context.temp_override(
+    object=tail, active_object=tail, selected_objects=[tail]
+):
     bpy.ops.object.modifier_apply(modifier="solid")
 rag_parts.append(tail)
 
@@ -179,8 +238,10 @@ bottle.parent = armature
 # UE FBX convention: armature object named 'Armature' is stripped on import
 armature.name = "Armature"
 
-print(f"final mesh: {len(bottle.data.vertices)} verts, {len(bottle.data.polygons)} polys, "
-      f"materials={[m.name for m in bottle.data.materials]}")
+print(
+    f"final mesh: {len(bottle.data.vertices)} verts, {len(bottle.data.polygons)} polys, "
+    f"materials={[m.name for m in bottle.data.materials]}"
+)
 
 # --- save + export ---
 blend_path = os.path.join(OUT_DIR, "molotov_bottle.blend")
