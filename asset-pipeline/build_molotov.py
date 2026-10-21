@@ -4,13 +4,10 @@ import bpy
 import bmesh
 import math
 import os
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 EXPORTS = r"C:\Tools\FModel\Output\Exports"
-RGD5_GLB = os.path.join(
-    EXPORTS,
-    r"Stalker2\Content\_STALKER2\SkeletalMeshes\weapons\grenades\RGD5\SK_RGD5.glb",
-)
+RGD5_FBX = r"c:\Code\westerfield.cloud\Gaming\stalker-2\asset-pipeline\ref\Game\_STALKER2\SkeletalMeshes\weapons\grenades\RGD5\SK_RGD5.FBX"
 ZG_GLB = os.path.join(
     EXPORTS, r"Stalker2\Mods\ZoneGrenades\Content\Meshes\SK_ZoneGrenadeBottle.glb"
 )
@@ -43,13 +40,35 @@ def world_bbox(obj):
 
 wipe()
 
-# --- armature from SK_RGD5 ---
-rgd5_objs = import_glb(RGD5_GLB)
+# --- armature from editor-exported SK_RGD5 (authoritative bind pose; the
+# glTF-converted rig skinned 25m off at runtime) ---
+before = set(bpy.context.scene.objects)
+bpy.ops.import_scene.fbx(filepath=RGD5_FBX)
+rgd5_objs = [o for o in bpy.context.scene.objects if o not in before]
 armature = next(o for o in rgd5_objs if o.type == "ARMATURE")
+print(f"armature scale={tuple(armature.scale)} loc={tuple(armature.location)}")
 for o in rgd5_objs:
     if o.type == "MESH":
         bpy.data.objects.remove(o, do_unlink=True)
 bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+bpy.ops.object.select_all(action="DESELECT")
+armature.select_set(True)
+bpy.context.view_layer.objects.active = armature
+# FBX importer stashes the cm->m unit conversion in delta_scale, which
+# transform_apply ignores — bake the FULL world matrix into the bones
+world = armature.matrix_world.copy()
+bpy.ops.object.mode_set(mode="EDIT")
+armature.data.transform(world)
+bpy.ops.object.mode_set(mode="OBJECT")
+armature.matrix_world.identity()
+armature.delta_location = (0, 0, 0)
+armature.delta_rotation_euler = (0, 0, 0)
+armature.delta_scale = (1, 1, 1)
+bpy.context.view_layer.update()
+assert armature.matrix_world.to_scale()[0] == 1.0, "armature world scale not identity"
+jb = armature.data.bones.get("jnt_offset")
+print(f"jnt_offset head_local: {tuple(jb.head_local) if jb else 'MISSING'}")
+print(f"bones: {sorted(b.name for b in armature.data.bones)}")
 
 # --- ZoneGrenades bottle: placement reference only ---
 zg_objs = import_glb(ZG_GLB)
@@ -90,6 +109,13 @@ print(f"aligned SM by delta ({delta.x:.4f},{delta.y:.4f},{delta.z:.4f})")
 bottle.data.transform(bottle.matrix_world)
 bottle.matrix_world.identity()
 bpy.context.view_layer.update()
+print(f"TRACE after bake: dims={tuple(round(d,4) for d in bottle.dimensions)}")
+
+# keep only the primary UV channel; extra channels union on join and bloat the
+# cooked vertex buffers (editor showed 4 UV channels — suspect for invisibility)
+while len(bottle.data.uv_layers) > 1:
+    bottle.data.uv_layers.remove(bottle.data.uv_layers[-1])
+bottle.data.uv_layers[0].name = "UVMap"
 
 # rename material slots to match game materials (ZG order: glass, label)
 slot_names = ["MI_cns_cossacks_vodka_01_glass", "MI_cns_cossacks_vodka_01_02"]
@@ -227,6 +253,15 @@ bpy.context.view_layer.objects.active = bottle
 bpy.ops.object.join()
 bottle.name = "SK_MolotovBottle"
 bottle.data.name = "SK_MolotovBottle"
+print(
+    f"TRACE after join: dims={tuple(round(d,4) for d in bottle.dimensions)} scale={tuple(bottle.scale)}"
+)
+
+tri = bottle.modifiers.new("tri", "TRIANGULATE")
+with bpy.context.temp_override(
+    object=bottle, active_object=bottle, selected_objects=[bottle]
+):
+    bpy.ops.object.modifier_apply(modifier="tri")
 
 # --- rigid skin: everything to jnt_offset ---
 vg = bottle.vertex_groups.new(name="jnt_offset")
@@ -234,12 +269,18 @@ vg.add(range(len(bottle.data.vertices)), 1.0, "REPLACE")
 mod = bottle.modifiers.new("Armature", "ARMATURE")
 mod.object = armature
 bottle.parent = armature
+bpy.context.view_layer.update()
+print(
+    f"TRACE after parent: dims={tuple(round(d,4) for d in bottle.dimensions)} arm_matrix_scale={tuple(round(v,4) for v in armature.matrix_world.to_scale())}"
+)
 
-# UE FBX convention: armature object named 'Armature' is stripped on import
-armature.name = "Armature"
+# Blender absorbed the FBX root bone into the armature object; keeping its name
+# makes UE re-create jnt_wpn_rgd5 as root (naming it 'Armature' would strip it)
+assert armature.name == "jnt_wpn_rgd5", f"unexpected armature name {armature.name}"
 
 print(
     f"final mesh: {len(bottle.data.vertices)} verts, {len(bottle.data.polygons)} polys, "
+    f"uv_channels={len(bottle.data.uv_layers)}, "
     f"materials={[m.name for m in bottle.data.materials]}"
 )
 
@@ -250,6 +291,21 @@ bpy.ops.wm.save_as_mainfile(filepath=blend_path)
 bpy.ops.object.select_all(action="DESELECT")
 bottle.select_set(True)
 armature.select_set(True)
+
+# The game's importer scales GEOMETRY by the FBX unit header but reads BONE
+# numerics raw: meter numerics cooked /100 bind matrices (invisible mesh),
+# cm numerics under a meter header imported geometry 100x big. Match the
+# UE-native convention exactly: cm numerics AND a cm unit header.
+cm = Matrix.Scale(100.0, 4)
+bpy.context.view_layer.objects.active = armature
+bpy.ops.object.mode_set(mode="EDIT")
+armature.data.transform(cm)
+bpy.ops.object.mode_set(mode="OBJECT")
+bottle.data.transform(cm)
+bpy.context.scene.unit_settings.scale_length = 0.01
+bpy.context.view_layer.update()
+print(f"TRACE cm bake: dims={tuple(round(d, 2) for d in bottle.dimensions)}")
+
 fbx_path = os.path.join(OUT_DIR, "SK_MolotovBottle.fbx")
 bpy.ops.export_scene.fbx(
     filepath=fbx_path,
@@ -257,7 +313,11 @@ bpy.ops.export_scene.fbx(
     object_types={"ARMATURE", "MESH"},
     add_leaf_bones=False,
     mesh_smooth_type="FACE",
-    apply_scale_options="FBX_SCALE_UNITS",
+    use_tspace=True,
+    # scene is now cm (scale_length 0.01): unit-aware export writes cm header
+    # with the cm numerics untouched
+    apply_unit_scale=True,
+    apply_scale_options="FBX_SCALE_NONE",
     bake_anim=False,
 )
 print(f"exported {fbx_path}")
