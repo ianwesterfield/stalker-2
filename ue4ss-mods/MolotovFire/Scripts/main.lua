@@ -239,13 +239,9 @@ NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", 
                     end
                     return
                 end
-                local mesh = StaticFindObject(BOTTLE_MESH_PATH) or LoadAsset(BOTTLE_MESH_PATH)
-                if not (mesh and mesh:IsValid()) then log("bottleize: mesh load failed") return end
-                local smc = grenade.StaticMeshComponent
-                if smc and smc:IsValid() then
-                    smc:SetStaticMesh(mesh)
-                    log("bottleize: swapped")
-                end
+                -- mesh swap retired: cfg MeshInWorldPrototypeSID ships the bottle; a
+                -- runtime SetStaticMesh rebuilt the physics body mid-flight and froze it
+                log("bottleize: cfg mesh in use")
                 -- NO live component sweeps here: FindAllOf over world mesh comps
                 -- caused a native AV (uncatchable). FP-hands hunt moved to offline dumps.
             end)
@@ -632,7 +628,7 @@ local function fpRestore()
     fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
     fp.anchor, fp.boneName, fp.baseLoc, fp.baseRot = nil, nil, nil, nil
     fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal, fp.rag = nil, nil, nil, nil, nil, nil
-    fp.gripLogged, fp.welded, fp.weldLogged, fp.tickN = nil, nil, nil, nil
+    fp.gripLogged, fp.welded, fp.weldLogged, fp.tickN, fp.flameAnim = nil, nil, nil, nil, nil
 end
 
 local function mainHandSID()
@@ -783,55 +779,87 @@ local FP_SWAP_ENABLED = false
 -- attaches straight to its grenade bone — no spawn/weld/track machinery.
 local FLAME_ENABLED = true
 local FLAME_Z = 26   -- bone -> bottle-neck offset; tune if flame floats/sinks
+-- F8 cycles: 1 wpn-bone+FPflag, 2 wpn-bone raw, 3 hand-bone+FPflag, 4 hand-bone raw
+local FLAME_VARIANT = 2
+local function lightFlame(anim, variant)
+    local ok, err = pcall(function()
+        if not (anim and anim:IsValid()) then return end
+        local mesh
+        pcall(function() mesh = anim:GetOwningComponent() end)
+        if not (mesh and mesh:IsValid()) then
+            pcall(function() mesh = anim:GetOuter() end)
+        end
+        if not (mesh and mesh:IsValid()) then log("FP: no hands mesh for flame") return end
+        fpRestore()
+        fp.flameAnim = anim   -- after fpRestore: it wipes the stash
+        local owner = mesh:GetOwner()
+        local ncClass = StaticFindObject("/Script/Niagara.NiagaraComponent")
+        if not (ncClass and ncClass:IsValid() and owner and owner:IsValid()) then
+            log("FP: flame prereqs missing")
+            return
+        end
+        local ns, nsPath
+        for _, p in ipairs({
+            "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Kerosene_2.NS_Fire_Kerosene_2",
+            "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle_2.NS_Fire_Candle_2",
+            "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle.NS_Fire_Candle",
+        }) do
+            ns = StaticFindObject(p)
+            if not (ns and ns:IsValid()) then ns = LoadAsset(p) end
+            if ns and ns:IsValid() then nsPath = p break end
+        end
+        if not (ns and ns:IsValid()) then log("FP: flame - no fire asset loadable") return end
+        local target, bone = mesh, pickGrenadeBone(mesh)
+        if variant >= 3 then   -- body rig: the proven-rendering parent from the old swap
+            local parent, parentSock
+            pcall(function() parent = mesh:GetAttachParent() end)
+            pcall(function()
+                local s = mesh:GetAttachSocketName()
+                parentSock = tostring(s and s.ToString and s:ToString() or s)
+            end)
+            if parent and parent:IsValid() then
+                local hb = pickHandBone(parent, parentSock)
+                if hb then target, bone = parent, hb end
+            end
+        end
+        local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
+                      Translation = { X = 0, Y = 0, Z = 0 },
+                      Scale3D = { X = 1, Y = 1, Z = 1 } }
+        local rag = owner:AddComponentByClass(ncClass, true, idT, false)
+        if not (rag and rag:IsValid()) then log("FP: flame - AddComponentByClass failed") return end
+        rag:SetAsset(ns, true)
+        if variant % 2 == 1 then
+            pcall(function() rag:SetFirstPersonPrimitiveType(1) end)   -- 1 = FirstPerson
+        end
+        rag:K2_AttachToComponent(target, FName(bone or "None"), 2, 2, 0, false)
+        rag:K2_SetRelativeLocation({ X = 0, Y = 0, Z = FLAME_Z }, false, {}, false)
+        pcall(function() rag:Activate(true) end)
+        fp.rag, fp.mesh, fp.animName = rag, mesh, anim:GetFullName()
+        log(string.format("FP: rag flame lit v%d on %s (%s)", variant, tostring(bone),
+            nsPath:match("([^/]+)$")))
+    end)
+    if not ok then log("FP flame ERR: " .. tostring(err)) end
+end
 local function fpFlame(anim)
     ExecuteWithDelay(300, function()
         ExecuteInGameThread(function()
-            local ok, err = pcall(function()
-                if not (anim and anim:IsValid()) then return end
-                local sid = mainHandSID()
-                if not (sid:find("Molotov") or sid == "unreadable") then return end
-                local mesh
-                pcall(function() mesh = anim:GetOwningComponent() end)
-                if not (mesh and mesh:IsValid()) then
-                    pcall(function() mesh = anim:GetOuter() end)
-                end
-                if not (mesh and mesh:IsValid()) then log("FP: no hands mesh for flame") return end
-                fpRestore()
-                local owner = mesh:GetOwner()
-                local ncClass = StaticFindObject("/Script/Niagara.NiagaraComponent")
-                if not (ncClass and ncClass:IsValid() and owner and owner:IsValid()) then
-                    log("FP: flame prereqs missing")
-                    return
-                end
-                local ns, nsPath
-                for _, p in ipairs({
-                    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Kerosene_2.NS_Fire_Kerosene_2",
-                    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle_2.NS_Fire_Candle_2",
-                    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle.NS_Fire_Candle",
-                }) do
-                    ns = StaticFindObject(p)
-                    if not (ns and ns:IsValid()) then ns = LoadAsset(p) end
-                    if ns and ns:IsValid() then nsPath = p break end
-                end
-                if not (ns and ns:IsValid()) then log("FP: flame - no fire asset loadable") return end
-                local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
-                              Translation = { X = 0, Y = 0, Z = 0 },
-                              Scale3D = { X = 1, Y = 1, Z = 1 } }
-                local rag = owner:AddComponentByClass(ncClass, true, idT, false)
-                if not (rag and rag:IsValid()) then log("FP: flame - AddComponentByClass failed") return end
-                rag:SetAsset(ns, true)
-                pcall(function() rag:SetFirstPersonPrimitiveType(1) end)   -- 1 = FirstPerson
-                local bone = pickGrenadeBone(mesh)
-                rag:K2_AttachToComponent(mesh, FName(bone or "None"), 2, 2, 0, false)
-                rag:K2_SetRelativeLocation({ X = 0, Y = 0, Z = FLAME_Z }, false, {}, false)
-                pcall(function() rag:Activate(true) end)
-                fp.rag, fp.mesh, fp.animName = rag, mesh, anim:GetFullName()
-                log("FP: rag flame lit on " .. tostring(bone) .. " (" .. nsPath:match("([^/]+)$") .. ")")
-            end)
-            if not ok then log("FP flame ERR: " .. tostring(err)) end
+            local sid = mainHandSID()
+            if not (sid:find("Molotov") or sid == "unreadable") then return end
+            lightFlame(anim, FLAME_VARIANT)
         end)
     end)
 end
+
+RegisterKeyBind(Key.F8, function()
+    ExecuteInGameThread(function()
+        FLAME_VARIANT = FLAME_VARIANT % 4 + 1
+        if fp.flameAnim and fp.flameAnim:IsValid() then
+            lightFlame(fp.flameAnim, FLAME_VARIANT)
+        else
+            log("FP: F8 - no live hands anim to relight")
+        end
+    end)
+end)
 
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
     if FP_SWAP_ENABLED then
