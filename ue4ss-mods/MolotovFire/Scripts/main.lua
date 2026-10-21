@@ -778,9 +778,11 @@ local FP_SWAP_ENABLED = false
 -- Flame-only path: the visible weapon mesh IS the bottle now, so the rag flame
 -- attaches straight to its grenade bone — no spawn/weld/track machinery.
 local FLAME_ENABLED = true
-local FLAME_Z = 26   -- bone -> bottle-neck offset; tune if flame floats/sinks
+-- hand-bone-local offset; origin sits at the grip = bottle base, so the neck is
+-- somewhere off-axis — tune live with arrows/PgUp/PgDn and bake the logged values
+local FLAME_OFF = { X = 0, Y = 0, Z = 26 }
 -- F8 cycles: 1 wpn-bone+FPflag, 2 wpn-bone raw, 3 hand-bone+FPflag, 4 hand-bone raw
-local FLAME_VARIANT = 2
+local FLAME_VARIANT = 3
 local function lightFlame(anim, variant)
     local ok, err = pcall(function()
         if not (anim and anim:IsValid()) then return end
@@ -832,7 +834,7 @@ local function lightFlame(anim, variant)
             pcall(function() rag:SetFirstPersonPrimitiveType(1) end)   -- 1 = FirstPerson
         end
         rag:K2_AttachToComponent(target, FName(bone or "None"), 2, 2, 0, false)
-        rag:K2_SetRelativeLocation({ X = 0, Y = 0, Z = FLAME_Z }, false, {}, false)
+        rag:K2_SetRelativeLocation({ X = FLAME_OFF.X, Y = FLAME_OFF.Y, Z = FLAME_OFF.Z }, false, {}, false)
         pcall(function() rag:Activate(true) end)
         fp.rag, fp.mesh, fp.animName = rag, mesh, anim:GetFullName()
         log(string.format("FP: rag flame lit v%d on %s (%s)", variant, tostring(bone),
@@ -860,6 +862,22 @@ RegisterKeyBind(Key.F8, function()
         end
     end)
 end)
+
+local function flameNudge(axis, d)
+    ExecuteInGameThread(function()
+        if not (fp.rag and fp.rag:IsValid()) then return end
+        FLAME_OFF[axis] = FLAME_OFF[axis] + d
+        fp.rag:K2_SetRelativeLocation(
+            { X = FLAME_OFF.X, Y = FLAME_OFF.Y, Z = FLAME_OFF.Z }, false, {}, false)
+        log(string.format("FP: flame off X=%g Y=%g Z=%g", FLAME_OFF.X, FLAME_OFF.Y, FLAME_OFF.Z))
+    end)
+end
+RegisterKeyBind(Key.UP_ARROW, function() flameNudge("X", 3) end)
+RegisterKeyBind(Key.DOWN_ARROW, function() flameNudge("X", -3) end)
+RegisterKeyBind(Key.LEFT_ARROW, function() flameNudge("Y", -3) end)
+RegisterKeyBind(Key.RIGHT_ARROW, function() flameNudge("Y", 3) end)
+RegisterKeyBind(Key.PAGE_UP, function() flameNudge("Z", 3) end)
+RegisterKeyBind(Key.PAGE_DOWN, function() flameNudge("Z", -3) end)
 
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
     if FP_SWAP_ENABLED then
