@@ -381,3 +381,20 @@ Gaming/stalker-2/
 - Does the puppet persist across the host walking 2+ regions away and back (streaming
   despawn vs our respawn-from-feed)? Tier A soak answers it.
 - Clock sync source of truth for later phases — game world time vs wall clock (defer).
+
+## 10. Zone Kit research agenda (added 2026-10-21)
+
+Zone Kit (official SDK, UE 5.5 editor + uncooked game content) can answer by direct
+inspection what we reverse-engineered blind through UE4SS. Scheduled after the molotov
+asset work; highest-value ZoneLink session available.
+
+| Blind finding (UE4SS archaeology) | What Zone Kit shows directly |
+| --- | --- |
+| `AnimHumanStateData`/`CurveGaitState` writes stomped by model system (P-7) | Human AnimBP graph — what reads StateData and when; find an input the model system doesn't own, retire the montage hack |
+| Gait = `AS_tp_ar_combat_walk_fwd` dynamic montage on DefaultSlot — puppet walks in a permanent "defensive pose" | Full animation library — neutral walk/run/sprint locomotion sets |
+| `PoseSearchLocomotionCharacterMovementComponent` (motion matching, internals opaque) | PoseSearch database + config — potentially feed trajectories and get natural gait for free |
+| Tier B "what do we stream?" open question | Real bone/curve lists for the human rig — pose streaming targets exactly what the rig consumes |
+
+Note: the defensive-pose artifact is ours, not the game's — the puppet is driven
+kinematically by the host, so animation choice is always on us; fixing it means better
+source anims (or motion matching), not waiting for remote-player data.
