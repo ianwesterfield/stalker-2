@@ -242,7 +242,7 @@ mesh.update()
 tail = bpy.data.objects.new("rag_tail", mesh)
 bpy.context.collection.objects.link(tail)
 solid = tail.modifiers.new("solid", "SOLIDIFY")
-solid.thickness = 0.0028
+solid.thickness = 0.006
 solid.offset = 0
 with bpy.context.temp_override(
     object=tail, active_object=tail, selected_objects=[tail]
@@ -313,14 +313,13 @@ def make_flame_cards(prefix, center, base_z, f_h, f_w, f_rows=6, center_fn=None)
         flame_parts.append(card)
 
 
-f_base = top_z + 0.006  # roots inside the plug bulge
-make_flame_cards("flame_card", (cx, cy), f_base, 0.105, 0.058)
-
-# tail-tip flame: the lit end of the rag — licks UP the wick from the hem;
-# card centerline follows the tail's drape path so the fire hugs the cloth
-z_tip = tail_top - length
+# single flame cap: one wide cluster wrapping the plug — no satellite clusters,
+# which read as extra wicks; roots sunk below the bulge so the base is hidden
+f_base = top_z - 0.008
+make_flame_cards("flame_card", (cx, cy), f_base, 0.14, 0.10, f_rows=7)
 
 
+# faint blue alcohol burn down the wick (vertex alpha 0 marks the blue tint)
 def wick_center(z):
     t_tail = min(1.0, max(0.0, (tail_top - z) / length))
     theta = theta0 + drift * t_tail
@@ -331,12 +330,10 @@ def wick_center(z):
     return (c.x, c.y)
 
 
-# several small clusters along the tail so a tilted bottle shows a row of
-# little fires licking off the cloth instead of one long re-pointed tongue
 for frac, fh, fw, nrows in (
-    (1.0, 0.05, 0.034, 4),
-    (0.72, 0.04, 0.028, 3),
-    (0.45, 0.032, 0.024, 3),
+    (1.0, 0.055, 0.034, 4),
+    (0.7, 0.045, 0.03, 3),
+    (0.4, 0.038, 0.026, 3),
 ):
     zb = tail_top - length * frac
     make_flame_cards(
@@ -365,9 +362,10 @@ for part in [bottle, plug] + flame_parts:
     if part.name.startswith(("flame_", "tipflame_")):
         is_tip = part.name.startswith("tipflame_")
         base_z = min(v.co.z for v in part.data.vertices)
+        a_val = 0.0 if is_tip else 1.0  # A: 1 = orange cap, 0 = blue alcohol burn
         for i, vtx in enumerate(part.data.vertices):
             r_val = min(1.0, max(0.0, (tail_top - vtx.co.z) / 0.14)) if is_tip else 0.0
-            ca.data[i].color = (r_val, 1.0, (vtx.co.z - base_z) / 0.20, 1.0)
+            ca.data[i].color = (r_val, 1.0, (vtx.co.z - base_z) / 0.20, a_val)
     else:
         for d in ca.data:
             d.color = (0.0, 1.0, 0.0, 1.0)

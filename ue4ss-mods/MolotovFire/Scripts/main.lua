@@ -777,9 +777,8 @@ local FP_SWAP_ENABLED = false
 
 -- Flame-only path: the visible weapon mesh IS the bottle now, so the rag flame
 -- attaches straight to its grenade bone — no spawn/weld/track machinery.
--- Retired 2026-10-21: flame is now BAKED into SK_MolotovBottle (skinned cards +
--- animated material) — follows every montage by construction. Lua path kept as
--- fallback; flip true if the baked flame ever needs A/B comparison.
+-- Retired 2026-10-21; A/B'd again 2026-10-22 — user verdict: sits weird in FP,
+-- not the remembered look. Baked geometry flame stays the real path.
 local FLAME_ENABLED = false
 -- bottle bone space: jnt_offset at origin, base -12.9, mouth/rag +13.4
 local FLAME_OFF = { X = 0, Y = 0, Z = 14 }
