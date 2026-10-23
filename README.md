@@ -2,9 +2,9 @@
 
 Two projects live here:
 
-| Project              | What                                                                                  | Status                        |
-| -------------------- | ------------------------------------------------------------------------------------- | ----------------------------- |
-| **Molotov Cocktail** | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle    | Playable, iterating on polish |
+| Project              | What                                                                                                              | Status                        |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| **Molotov Cocktail** | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                 | Playable, iterating on polish |
 | **ZoneLink**         | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental)) | Tier A ghost verified         |
 
 ## Molotov Cocktail
@@ -136,11 +136,11 @@ The core trick that makes it testable with **one game copy**: the puppet driver 
 abstract StateFeed, which can be filled by a socket, a trace file, or your own movement on a
 delay. That yields a three-tier test ladder:
 
-| Tier             | Needs                            | Validates                                                      | Status       |
-| ---------------- | -------------------------------- | --------------------------------------------------------------- | ------------ |
-| **A — Ghost**    | 1 game copy, pure Lua            | Puppet spawn/AI suppression/anim quality — all top game risks  | **Verified** |
-| **B — Sim peer** | 1 game copy + `zonelink-sim` exe | Wire protocol, jitter/loss, interp buffer, handshake            | Next         |
-| **C — LAN**      | 2 machines, 2 licenses           | End-to-end bidirectional                                        | Later        |
+| Tier             | Needs                            | Validates                                                     | Status       |
+| ---------------- | -------------------------------- | ------------------------------------------------------------- | ------------ |
+| **A — Ghost**    | 1 game copy, pure Lua            | Puppet spawn/AI suppression/anim quality — all top game risks | **Verified** |
+| **B — Sim peer** | 1 game copy + `zonelink-sim` exe | Wire protocol, jitter/loss, interp buffer, handshake          | Next         |
+| **C — LAN**      | 2 machines, 2 licenses           | End-to-end bidirectional                                      | Later        |
 
 Current Tier-A build keys: **F2** record own movement to trace · **F3** spawn + protect puppet ·
 **F4** cycle drive OFF → ESCORT (10 m stations) → GHOST (trace replay) · **F9** object dump.
