@@ -1,4 +1,13 @@
-# stalker-2 — Molotov Cocktail mod
+# stalker-2 — Zone mods
+
+Two projects live here:
+
+| Project              | What                                                                                  | Status                        |
+| -------------------- | ------------------------------------------------------------------------------------- | ----------------------------- |
+| **Molotov Cocktail** | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle    | Playable, iterating on polish |
+| **ZoneLink**         | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental)) | Tier A ghost verified         |
+
+## Molotov Cocktail
 
 Adds the Zone's most conspicuously missing weapon to S.T.A.L.K.E.R. 2: Heart of Chornobyl:
 a throwable **Molotov Cocktail** (`GrenadeMolotov`) with impact detonation, ground fire,
@@ -7,11 +16,11 @@ there was already this much vodka lying around.
 
 ## Architecture: three cooperating layers
 
-| Layer             | Lives in                                           | Ships as                                                    | Does                                                                 |
-| ----------------- | -------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------- |
-| Game-data overlay | [mod/](mod/)                                       | `MolotovCocktail_P.pak` → `Content/Paks/~mods`              | Item/explosion/trade/mesh prototypes, localization                   |
-| Custom asset      | [asset-pipeline/](asset-pipeline/)                 | `MolotovBottle` Zone Kit plugin paks → `Mods/MolotovBottle` | Skeletal bottle + rag + flame (in-hand), static twin (world/thrown)  |
-| Runtime behavior  | [ue4ss-mods/MolotovFire/](ue4ss-mods/MolotovFire/) | UE4SS Lua → `Binaries/Win64/ue4ss/Mods`                     | Impact detonation, ground fire patches, fuse fallback                |
+| Layer             | Lives in                                           | Ships as                                                    | Does                                                                |
+| ----------------- | -------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| Game-data overlay | [mod/](mod/)                                       | `MolotovCocktail_P.pak` → `Content/Paks/~mods`              | Item/explosion/trade/mesh prototypes, localization                  |
+| Custom asset      | [asset-pipeline/](asset-pipeline/)                 | `MolotovBottle` Zone Kit plugin paks → `Mods/MolotovBottle` | Skeletal bottle + rag + flame (in-hand), static twin (world/thrown) |
+| Runtime behavior  | [ue4ss-mods/MolotovFire/](ue4ss-mods/MolotovFire/) | UE4SS Lua → `Binaries/Win64/ue4ss/Mods`                     | Impact detonation, ground fire patches, fuse fallback               |
 
 ## Game-data overlay (cfg pak)
 
@@ -111,3 +120,46 @@ translation cooks "successfully" and ships as the checkerboard.
 - English locres only; add `localization.<lang>.csv` and pass `-Languages` to extend.
 - After a game patch: re-run `build-locres.ps1` + `pack-mod.ps1` + `deploy-mod.ps1`
   (locres is a full-file override and must be rebuilt against the new vanilla).
+
+---
+
+## ZoneLink — co-op presence (experimental)
+
+First rung of a co-op MVP ladder: players each run their own single-player session and see
+each other as `BP_AI_Human_C` stalker puppets driven from a ~15 Hz state stream — position,
+locomotion animation, stance, spawn-time weapon. No combat sync, no world sync (yet).
+
+Full design: [docs/coop/01-presence.md](docs/coop/01-presence.md) ·
+Code: [ue4ss-mods/ZoneLink/Scripts/main.lua](ue4ss-mods/ZoneLink/Scripts/main.lua)
+
+The core trick that makes it testable with **one game copy**: the puppet driver consumes an
+abstract StateFeed, which can be filled by a socket, a trace file, or your own movement on a
+delay. That yields a three-tier test ladder:
+
+| Tier             | Needs                            | Validates                                                      | Status       |
+| ---------------- | -------------------------------- | --------------------------------------------------------------- | ------------ |
+| **A — Ghost**    | 1 game copy, pure Lua            | Puppet spawn/AI suppression/anim quality — all top game risks  | **Verified** |
+| **B — Sim peer** | 1 game copy + `zonelink-sim` exe | Wire protocol, jitter/loss, interp buffer, handshake            | Next         |
+| **C — LAN**      | 2 machines, 2 licenses           | End-to-end bidirectional                                        | Later        |
+
+Current Tier-A build keys: **F2** record own movement to trace · **F3** spawn + protect puppet ·
+**F4** cycle drive OFF → ESCORT (10 m stations) → GHOST (trace replay) · **F9** object dump.
+
+Hard-won findings baked into the build:
+
+- Reliable tick source is the HUD stat-panel widget's `Tick` — `WeatherController:ReceiveTick`
+  exists in reflection but never fires.
+- Puppet = `GeneralNPC_Neutral_Stormtrooper` (generic neutral A-Life stalker), identified via
+  `CppMediator:GetGUID`.
+- Ragdoll gate: hold the drive loop while the mesh simulates physics, and fetch anim instances
+  fresh (stale montage refs AV when an explosion lands near the puppet).
+
+ZoneLink will likely graduate to its own repo (`stalker2-zonelink`) once Tier B's sim peer
+lands; for now it rides along here.
+
+## Known limitations / next ideas (ZoneLink)
+
+- Loopback/trace feeds only — no sockets yet (`zonelink-sim` is the next milestone).
+- Escort stations are placeholder motion; real peer data replaces them in Tier B.
+- Damage/death, weapon-swap mirroring, A-Life/weather sync all deferred (see the phase table
+  in the design doc).
