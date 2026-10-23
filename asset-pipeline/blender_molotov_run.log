@@ -1,0 +1,31 @@
+FBX version: 7300
+armature scale=(1.0, 1.0, 1.0) loc=(0.0, 0.0, 0.0)
+jnt_offset head_local: (0.0, 0.0, 0.0)
+bones: ['jnt_hammer', 'jnt_l_hand', 'jnt_offset', 'jnt_r_hand', 'jnt_ring', 'jnt_safety_check', 'jnt_sear', 'jnt_sear_m1', 'jnt_sear_m2', 'jnt_wire1', 'jnt_wire2', 'jnt_wire3', 'jnt_wire4']
+22:44:17 | INFO: Data are loaded, start creating Blender stuff
+22:44:17 | INFO: Blender create Mesh node SK_ZoneGrenadeBottle
+22:44:17 | INFO: glTF import finished in 0.02s
+ZG bottle bbox: lo=(-0.0340,-0.0340,-0.1294) hi=(0.0340,0.0340,0.1233)
+22:44:17 | INFO: Data are loaded, start creating Blender stuff
+22:44:17 | INFO: Blender create Mesh node SM_cns_cossacks_vodka_01_c
+22:44:17 | INFO: glTF import finished in 0.00s
+SM bottle bbox: lo=(-0.0360,-0.0352,-0.0007) hi=(0.0349,0.0348,0.2542)
+aligned SM by delta (0.0006,0.0002,-0.1288)
+TRACE after bake: dims=(0.0709, 0.07, 0.2549)
+radius profile (bottomΓåÆtop): 36 36 35 36 36 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 37 0 36 0 0 20 21 22 0 19 21 0 20 18 17 18 19 18 15 18 17 18 19
+top_z=0.1255 wrap_z=0.0955 neck_r=17.7mm max_r=36.7mm
+TRACE after join: dims=(0.0895, 0.075, 0.3659) scale=(1.0, 1.0, 1.0)
+TRACE flame normal: (-0.0, -0.0, 1.0)
+TRACE after parent: dims=(0.0895, 0.075, 0.3659) arm_matrix_scale=(1.0, 1.0, 1.0)
+final mesh: 964 verts, 1288 polys, uv_channels=1, materials=['MI_cns_cossacks_vodka_01_glass', 'MI_cns_cossacks_vodka_01_02', 'MI_molotov_rag', 'M_RagFlame']
+Info: Saved as "molotov_bottle.blend"
+TRACE cm bake: dims=(8.95, 7.5, 36.59)
+
+FBX export starting... 'c:\\Code\\westerfield.cloud\\Gaming\\stalker-2\\asset-pipeline\\out\\SK_MolotovBottle.fbx'
+(bpy.data.armatures['jnt_wpn_rgd5'], 'POSE')
+export finished in 0.0093 sec.
+exported c:\Code\westerfield.cloud\Gaming\stalker-2\asset-pipeline\out\SK_MolotovBottle.fbx
+done
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:37:04)
+
+Blender quit

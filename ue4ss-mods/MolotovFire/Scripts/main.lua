@@ -777,13 +777,15 @@ local FP_SWAP_ENABLED = false
 
 -- Flame-only path: the visible weapon mesh IS the bottle now, so the rag flame
 -- attaches straight to its grenade bone — no spawn/weld/track machinery.
--- Mothballed with FP swap: bone-space fire never renders right; rag/flame belongs
--- in the authored SK asset (Zone Kit), not runtime attachment.
+-- Retired 2026-10-21: flame is now BAKED into SK_MolotovBottle (skinned cards +
+-- animated material) — follows every montage by construction. Lua path kept as
+-- fallback; flip true if the baked flame ever needs A/B comparison.
 local FLAME_ENABLED = false
--- hand-bone-local offset; origin sits at the grip = bottle base, so the neck is
--- somewhere off-axis — tune live with arrows/PgUp/PgDn and bake the logged values
-local FLAME_OFF = { X = 0, Y = 0, Z = 26 }
--- F8 cycles: 1 wpn-bone+FPflag, 2 wpn-bone raw, 3 hand-bone+FPflag, 4 hand-bone raw
+-- bottle bone space: jnt_offset at origin, base -12.9, mouth/rag +13.4
+local FLAME_OFF = { X = 0, Y = 0, Z = 14 }
+-- INS cycles: 1 wpn-bone+FPflag, 2 wpn-bone raw, 3 hand-bone+FPflag, 4 hand-bone raw
+-- default 3: weapon-mesh bones stop pushing child transforms during montages,
+-- so the flame froze mid-throw; the body rig's hand bone animates through all of them
 local FLAME_VARIANT = 3
 local function lightFlame(anim, variant)
     local ok, err = pcall(function()
@@ -803,10 +805,11 @@ local function lightFlame(anim, variant)
             return
         end
         local ns, nsPath
+        -- candle first: a fuel-soaked rag is a small sooty torch, not a bonfire
         for _, p in ipairs({
-            "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Kerosene_2.NS_Fire_Kerosene_2",
             "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle_2.NS_Fire_Candle_2",
             "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle.NS_Fire_Candle",
+            "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Kerosene_2.NS_Fire_Kerosene_2",
         }) do
             ns = StaticFindObject(p)
             if not (ns and ns:IsValid()) then ns = LoadAsset(p) end
@@ -837,6 +840,8 @@ local function lightFlame(anim, variant)
         end
         rag:K2_AttachToComponent(target, FName(bone or "None"), 2, 2, 0, false)
         rag:K2_SetRelativeLocation({ X = FLAME_OFF.X, Y = FLAME_OFF.Y, Z = FLAME_OFF.Z }, false, {}, false)
+        -- batched Niagara sim pauses when the FP-flagged parent fails its render heuristic
+        pcall(function() rag:SetForceSolo(true) end)
         pcall(function() rag:Activate(true) end)
         fp.rag, fp.mesh, fp.animName = rag, mesh, anim:GetFullName()
         log(string.format("FP: rag flame lit v%d on %s (%s)", variant, tostring(bone),
@@ -854,13 +859,13 @@ local function fpFlame(anim)
     end)
 end
 
-RegisterKeyBind(Key.F8, function()
+RegisterKeyBind(Key.DEL, function()   -- Lua flame variant cycler (retired fallback)
     ExecuteInGameThread(function()
         FLAME_VARIANT = FLAME_VARIANT % 4 + 1
         if fp.flameAnim and fp.flameAnim:IsValid() then
             lightFlame(fp.flameAnim, FLAME_VARIANT)
         else
-            log("FP: F8 - no live hands anim to relight")
+            log("FP: DEL - no live hands anim to relight")
         end
     end)
 end)
@@ -923,23 +928,12 @@ local function liveInstance(className)
     return nil
 end
 
-RegisterKeyBind(Key.F7, function()
+RegisterKeyBind(Key.INS, function()   -- F7 is taken by the game, U is the map
     ExecuteInGameThread(function()
-        log("F7 pressed")
-        local build = liveInstance("CustomConsoleManagerBuild")
-        log("CCM Build instance: " .. tostring(build ~= nil))
-        if build then
-            for _, sid in ipairs({ "Vodka", "GrenadeMolotov" }) do
-                local ok, err = pcall(function() build:XSpawnItemNearPlayerBySID(sid) end)
-                log("XSpawnItemNearPlayerBySID " .. sid .. " -> " .. (ok and "called" or tostring(err)))
-            end
-        end
         local rk = liveInstance("CustomConsoleManagerRK")
-        log("CCM RK instance: " .. tostring(rk ~= nil))
-        if rk then
-            local ok, err = pcall(function() rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, 3, 1.0) end)
-            log("XCreateItemInInventoryByID GrenadeMolotov -> " .. (ok and "called" or tostring(err)))
-        end
+        if not rk then log("INS: no CustomConsoleManagerRK instance") return end
+        local ok, err = pcall(function() rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, 10, 1.0) end)
+        log("INS: +10 GrenadeMolotov -> " .. (ok and "ok" or tostring(err)))
     end)
 end)
 
