@@ -22,7 +22,8 @@ ExecuteInGameThread(function()
                 local m = c:GetMaterial(i)
                 local fn = (m and m:IsValid()) and m:GetFullName() or "nil"
                 print(string.format("[droop] slot %d = %s\n", i, fn))
-                if fn:find("MolotovRag", 1, true) or fn:find("RagFlame", 1, true) then
+                if fn:find("MolotovRag", 1, true) or fn:find("RagFlame", 1, true)
+                        or fn:find("SheathFlame", 1, true) then
                     local mid = c:CreateDynamicMaterialInstance(i, m, FName("None"))
                     if mid and mid:IsValid() then
                         mid:SetScalarParameterValue(FName(pname), value)

@@ -38,6 +38,9 @@ assert mat, "material create failed"
 mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
 mat.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
 mat.set_editor_property("two_sided", True)
+# headless builds never render the mesh, so the usage flag never auto-sets ->
+# cook ships no skeletal permutation -> game silently uses the default material
+mat.set_editor_property("used_with_skeletal_mesh", True)
 
 
 def node(cls, x, y, **props):
