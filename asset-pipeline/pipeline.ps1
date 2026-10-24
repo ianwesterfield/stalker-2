@@ -84,7 +84,7 @@ if (-not $SkipEditor) {
   if (-not (Select-String -Path $log -Pattern 'HEADLESS_ALL_DONE' -Quiet)) {
     Fail "editor run ended without HEADLESS_ALL_DONE (see $log)"
   }
-  foreach ($sentinel in 'SLOTS_FIXED saved=True', 'SM_FIXED saved=True', 'PHYS_DONE', 'SHEATH_MAT_DONE') {
+  foreach ($sentinel in 'SLOTS_FIXED saved=True', 'SM_FIXED saved=True', 'PHYS_DONE', 'FLAME_MAT_DONE', 'SHEATH_MAT_DONE') {
     if (-not (Select-String -Path $log -Pattern $sentinel -SimpleMatch -Quiet)) {
       Fail "missing '$sentinel' (see $log)"
     }

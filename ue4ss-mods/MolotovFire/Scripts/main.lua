@@ -291,10 +291,14 @@ local function tuneFlightLook(grenade, attempt)
     end)
 end
 
+local douseRagFire   -- fwd decl: fp lives below; assigned beside ragFire
+
 NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", function(grenade)
     tracked[#tracked + 1] = { actor = grenade, x = 0, y = 0, z = 0, alive = true, seen = 0 }
     trackedCount = trackedCount + 1
     log("grenade spawned (equipped)")
+    -- the hand fire must not ride the arm after the bottle flies
+    if douseRagFire then douseRagFire("thrown") end
     ExecuteWithDelay(16, function() tuneFlightLook(grenade, 1) end)
     -- dump: BP_Grenade_C has exactly one StaticMeshComponent, no skeletal
     ExecuteWithDelay(300, function()
@@ -1025,8 +1029,81 @@ kickRagPhysics = function(anim, attempt)
     end)
 end
 
+-- Rag surface fire: the player-burn system's emitters sample their attach
+-- parent's skeletal mesh (NiagaraDataInterfaceSkeletalMesh), so attached to
+-- the bottle mesh the fire crawls the swinging rag itself. No sound loop.
+local RAG_FIRE_ENABLED = true
+local RAG_FIRE_ASSETS = {
+    "/Game/_Stalker_2/VFX/Player/NS_Character_Fire.NS_Character_Fire",
+    "/Game/_Stalker_2/VFX/Anomalies/ClassicFire/Niagara/NS_ClassicFireNPCBurning.NS_ClassicFireNPCBurning",
+}
+local ragFire
+ragFire = function(anim, attempt)
+    ExecuteWithDelay(attempt == 1 and 400 or 500, function()
+        ExecuteInGameThread(function()
+            local ok, err = pcall(function()
+                if not (anim and anim:IsValid()) then return end
+                if fp.rag and fp.rag:IsValid() then return end
+                local sid = mainHandSID()
+                if not (sid:find("Molotov") or sid == "unreadable") then return end
+                local mesh
+                pcall(function() mesh = anim:GetOwningComponent() end)
+                if not (mesh and mesh:IsValid()) then
+                    pcall(function() mesh = anim:GetOuter() end)
+                end
+                if not (mesh and mesh:IsValid()) then return end
+                local fn = ""
+                pcall(function() fn = tostring(mesh:GetSkeletalMeshAsset():GetFullName()) end)
+                if fn ~= "" and not fn:find("SK_MolotovBottle", 1, true) then return end
+                local owner = mesh:GetOwner()
+                local ncClass = StaticFindObject("/Script/Niagara.NiagaraComponent")
+                if not (ncClass and ncClass:IsValid() and owner and owner:IsValid()) then return end
+                local ns, nsPath
+                for _, p in ipairs(RAG_FIRE_ASSETS) do
+                    ns = StaticFindObject(p)
+                    if not (ns and ns:IsValid()) then ns = LoadAsset(p) end
+                    if ns and ns:IsValid() then nsPath = p break end
+                end
+                if not (ns and ns:IsValid()) then log("ragfire: no system loadable") return end
+                local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
+                              Translation = { X = 0, Y = 0, Z = 0 },
+                              Scale3D = { X = 1, Y = 1, Z = 1 } }
+                local comp = owner:AddComponentByClass(ncClass, true, idT, false)
+                if not (comp and comp:IsValid()) then log("ragfire: AddComponentByClass failed") return end
+                comp:SetAsset(ns, true)
+                pcall(function() comp:SetFirstPersonPrimitiveType(1) end)
+                comp:K2_AttachToComponent(mesh, FName("None"), 2, 2, 0, false)
+                comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
+                pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
+                -- lit smoke sprites render as a giant black card in unlit caves
+                pcall(function() comp:SetEmitterEnable(FName("smoke_4"), false) end)
+                pcall(function() comp:Activate(true) end)
+                fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
+                log("ragfire: lit attempt " .. attempt .. " (" .. nsPath:match("([^/]+)$") .. ")")
+            end)
+            if not ok then log("ragfire ERR: " .. tostring(err)) end
+            if not (fp.rag and fp.rag:IsValid()) and attempt < 5 then ragFire(anim, attempt + 1) end
+        end)
+    end)
+end
+
+douseRagFire = function(why)
+    if not fp.rag then return end
+    ExecuteInGameThread(function()
+        pcall(function()
+            if fp.rag and fp.rag:IsValid() then
+                fp.rag:Deactivate()
+                fp.rag:K2_DestroyComponent(fp.rag)
+            end
+        end)
+        fp.rag = nil
+        log("ragfire: doused (" .. tostring(why) .. ")")
+    end)
+end
+
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
     kickRagPhysics(anim, 1)
+    if RAG_FIRE_ENABLED then ragFire(anim, 1) end
     if FP_SWAP_ENABLED then
         hookGrenadeTick()   -- main-state context; HUD widget class is loaded once hands are up
         fpSwap(anim, 1)
