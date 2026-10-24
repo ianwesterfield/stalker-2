@@ -11,6 +11,7 @@ import unreal
 HERE = os.path.dirname(os.path.abspath(__file__))
 STEPS = (
     "editor_reimport_sk.py",
+    "editor_build_sheath_mat.py",  # delete+recreate = fresh cook translation
     "editor_fix_slots2.py",
     "editor_fix_phys.py",
     "editor_import_sm.py",
