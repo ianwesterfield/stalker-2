@@ -1077,11 +1077,17 @@ ragFire = function(anim, attempt)
                 comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
                 pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
                 pcall(function() comp:Activate(true) end)
-                -- lit smoke sprites = giant black card in unlit caves; only works on a
-                -- LIVE instance (post-Activate), and handle name is uncertain -> try all
-                for _, en in ipairs({ "smoke_4", "smoke", "Smoke", "smoke001" }) do
-                    pcall(function() comp:SetEmitterEnable(FName(en), false) end)
+                -- lit smoke sprites = giant black card in unlit caves; activation can
+                -- defer instance creation, so disable now AND once more shortly after
+                local function noSmoke(tag)
+                    if not (comp and comp:IsValid()) then return end
+                    local okE, errE = pcall(function() comp:SetEmitterEnable(FName("smoke_4"), false) end)
+                    log("ragfire: smoke_4 off (" .. tag .. ") -> " .. (okE and "ok" or tostring(errE)))
                 end
+                noSmoke("immediate")
+                ExecuteWithDelay(250, function()
+                    ExecuteInGameThread(function() noSmoke("delayed") end)
+                end)
                 fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 log("ragfire: lit attempt " .. attempt .. " (" .. nsPath:match("([^/]+)$") .. ")")
             end)
