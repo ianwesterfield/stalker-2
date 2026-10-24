@@ -11,6 +11,7 @@ ASSIGN = {
     "MI_cns_cossacks_vodka_01_02": f"{GAME_MATS}/MI_cns_cossacks_vodka_01_02",
     "MI_molotov_rag": f"{PLUGIN}/M_MolotovRag",
     "M_RagFlame": f"{PLUGIN}/M_RagFlame",
+    "M_SheathFlame": f"{PLUGIN}/M_SheathFlame",
 }
 
 sm = unreal.EditorAssetLibrary.load_asset(SM_PATH)
@@ -23,7 +24,12 @@ sm.set_editor_property("nanite_settings", nanite_settings)
 assert not sm.get_editor_property("nanite_settings").get_editor_property("enabled")
 unreal.log("[fixsm] Nanite disabled for static bottle render test")
 
-sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+# subsystems don't exist in commandlet (headless) runs — the deprecated
+# function library has the same API and works in both modes
+sub = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem) or getattr(
+    unreal, "EditorStaticMeshLibrary", None
+)
+assert sub, "no StaticMeshEditorSubsystem or EditorStaticMeshLibrary available"
 bs = sub.get_lod_build_settings(sm, 0)
 bs.set_editor_property("recompute_normals", False)
 bs.set_editor_property("recompute_tangents", True)

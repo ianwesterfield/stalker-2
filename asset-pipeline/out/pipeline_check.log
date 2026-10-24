@@ -1,0 +1,19 @@
+FBX version: 7400
+CHECK mesh objects: ['SK_MolotovBottle']
+CHECK verts=2978 polys=5220
+CHECK material slots: ['MI_cns_cossacks_vodka_01_glass', 'MI_cns_cossacks_vodka_01_02', 'MI_molotov_rag', 'M_RagFlame', 'M_SheathFlame']
+CHECK color attributes: {'Col': ('CORNER', 'BYTE_COLOR')}
+CHECK color samples=15660 R>0.01: 5574  G<0.5: 4284
+CHECK R range: 0.0 .. 1.0
+CHECK RagFlame material index: 3
+CHECK RagFlame loop normals: n=126 min_z=1.000 max_z=1.000
+CHECK SheathFlame material index: 4
+CHECK SheathFlame loop normals: n=4872 min_z=1.000 max_z=1.000
+FBX version: 7400
+CHECK SM verts=2972 polys=5218
+CHECK SM RagFlame loop normals: n=126 min_z=1.000
+CHECK SM SheathFlame loop normals: n=4872 min_z=1.000
+CHECK_DONE
+Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:37:04)
+
+Blender quit

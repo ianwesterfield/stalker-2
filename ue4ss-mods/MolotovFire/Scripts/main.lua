@@ -211,10 +211,91 @@ end)
 log(okHit and "impact hook armed on Grenade:OnHit"
     or ("impact hook FAILED (fuse fallback only): " .. tostring(errHit)))
 
+-- Flight look: in-hand bend clamp (0.75) lets the cap flame comet away from a
+-- tumbling bottle and the unlit cloth goes invisible in the dark — tame the bend +
+-- overdrive the burn film on THIS grenade's MIDs only. The actor is constructed AT
+-- the throw and short lobs land in ~300ms (log-proven: BOOM before bottleize), so
+-- apply on a fast retry ladder from frame 1 instead of bottleize's 300ms delay; the
+-- MolotovRag/RagFlame name gate holds off until the cfg materials are actually in.
+local FLIGHT_BENDCLAMP = 0.35
+local FLIGHT_BURNGLOW = 2.2
+local FLIGHT_DROOP = 6.0  -- pin offset = (dir - tangent) * vcR * this; 1.0 was ~2cm (sub-visible)
+-- static twin has no bones: pin the rag's droop direction instead — Skif's toss
+-- is consistent, so a fixed up+slightly-right-of-throw trail reads as drag
+local FLIGHT_PIN_UP, FLIGHT_PIN_RIGHT, FLIGHT_PIN_BACK = 0.75, 0.35, 0.25
+
+local function flightPinDir()
+    local yaw = 0
+    pcall(function()
+        yaw = UEHelpers.GetPlayerController():GetControlRotation().Yaw
+    end)
+    local r = math.rad(yaw)
+    local fx, fy = math.cos(r), math.sin(r)
+    local dx = -fy * FLIGHT_PIN_RIGHT - fx * FLIGHT_PIN_BACK
+    local dy = fx * FLIGHT_PIN_RIGHT - fy * FLIGHT_PIN_BACK
+    local dz = FLIGHT_PIN_UP
+    local len = math.sqrt(dx * dx + dy * dy + dz * dz)
+    return { R = dx / len, G = dy / len, B = dz / len, A = 0.0 }
+end
+
+local function tuneFlightLook(grenade, attempt)
+    ExecuteInGameThread(function()
+        local done = false
+        pcall(function()
+            if not (grenade and grenade:IsValid()) then done = true return end
+            local sid
+            pcall(function()
+                local v = grenade.SID
+                local s = tostring(v and v.ToString and v:ToString() or v)
+                if s ~= "" and s ~= "nil" then sid = s end
+            end)
+            if sid and not sid:find("Molotov") then done = true return end   -- RGD5/F1
+            local smcClass = StaticFindObject("/Script/Engine.StaticMeshComponent")
+            local comp = smcClass and smcClass:IsValid()
+                and grenade:GetComponentByClass(smcClass) or nil
+            if not (comp and comp:IsValid()) then return end   -- comp not built yet, retry
+            local pin = flightPinDir()
+            local tuned = 0
+            for i = 0, comp:GetNumMaterials() - 1 do
+                local m = comp:GetMaterial(i)
+                local fn = (m and m:IsValid()) and m:GetFullName() or ""
+                if fn:find("MolotovRag", 1, true) or fn:find("RagFlame", 1, true)
+                        or fn:find("SheathFlame", 1, true) then
+                    local mid = comp:CreateDynamicMaterialInstance(i, m, FName("None"))
+                    if mid and mid:IsValid() then
+                        mid:SetScalarParameterValue(FName("BendClamp"), FLIGHT_BENDCLAMP)
+                        mid:SetScalarParameterValue(FName("BurnGlow"), FLIGHT_BURNGLOW)
+                        if fn:find("MolotovRag", 1, true) then
+                            -- cloth only: the tip card's droop is still the old
+                            -- world-down chain and would dive opposite the pin
+                            mid:SetScalarParameterValue(FName("DroopStrength"), FLIGHT_DROOP)
+                            pcall(function()
+                                mid:SetVectorParameterValue(FName("DroopDir"), pin)
+                            end)
+                        else
+                            mid:SetScalarParameterValue(FName("DroopStrength"), 0.0)
+                        end
+                        tuned = tuned + 1
+                    end
+                end
+            end
+            if tuned > 0 then
+                done = true
+                log(string.format("flightlook: %d slot(s) tuned (attempt %d)", tuned, attempt))
+            end
+            -- rag materials not on the comp yet (cfg mesh still initializing) -> retry
+        end)
+        if not done and attempt < 12 then
+            ExecuteWithDelay(50, function() tuneFlightLook(grenade, attempt + 1) end)
+        end
+    end)
+end
+
 NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", function(grenade)
     tracked[#tracked + 1] = { actor = grenade, x = 0, y = 0, z = 0, alive = true, seen = 0 }
     trackedCount = trackedCount + 1
     log("grenade spawned (equipped)")
+    ExecuteWithDelay(16, function() tuneFlightLook(grenade, 1) end)
     -- dump: BP_Grenade_C has exactly one StaticMeshComponent, no skeletal
     ExecuteWithDelay(300, function()
         ExecuteInGameThread(function()
@@ -242,6 +323,8 @@ NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", 
                 -- mesh swap retired: cfg MeshInWorldPrototypeSID ships the bottle; a
                 -- runtime SetStaticMesh rebuilt the physics body mid-flight and froze it
                 log("bottleize: cfg mesh in use")
+                -- flight look applied by tuneFlightLook from frame 1 (not here: quick
+                -- throws land before this 300ms delay fires)
                 -- NO live component sweeps here: FindAllOf over world mesh comps
                 -- caused a native AV (uncatchable). FP-hands hunt moved to offline dumps.
             end)
@@ -885,7 +968,65 @@ RegisterKeyBind(Key.RIGHT_ARROW, function() flameNudge("Y", 3) end)
 RegisterKeyBind(Key.PAGE_UP, function() flameNudge("Z", 3) end)
 RegisterKeyBind(Key.PAGE_DOWN, function() flameNudge("Z", -3) end)
 
+-- In-hands rag ragdoll: the cooked PA marks jnt_fuse Simulated, but the game's
+-- pooled WeaponInHandsMesh comp may never create physics state (collision off)
+-- — kick it per equip. Readback-gated retry; forces PhysicsOnly collision once
+-- if the first kick lands on no bodies (PA bodies have collision disabled).
+local kickRagPhysics
+kickRagPhysics = function(anim, attempt)
+    ExecuteWithDelay(attempt == 1 and 250 or 400, function()
+        ExecuteInGameThread(function()
+            local simulating = false
+            pcall(function()
+                if not (anim and anim:IsValid()) then simulating = true return end
+                local sid = mainHandSID()
+                if not (sid:find("Molotov") or sid == "unreadable") then return end
+                local mesh
+                pcall(function() mesh = anim:GetOwningComponent() end)
+                if not (mesh and mesh:IsValid()) then
+                    pcall(function() mesh = anim:GetOuter() end)
+                end
+                if not (mesh and mesh:IsValid()) then return end
+                -- advisory gate: only hard-skip on a KNOWN foreign mesh (accessor may not reflect)
+                local fn = ""
+                pcall(function() fn = tostring(mesh:GetSkeletalMeshAsset():GetFullName()) end)
+                if fn ~= "" and not fn:find("SK_MolotovBottle", 1, true) then return end
+                mesh:SetAllBodiesBelowSimulatePhysics(FName("jnt_fuse"), true, true)
+                mesh:SetAllBodiesBelowPhysicsBlendWeight(FName("jnt_fuse"), 1.0, false, true)
+                pcall(function() simulating = mesh:IsSimulatingPhysics(FName("jnt_fuse")) end)
+                -- physics owns the hands rag now: kill the material droop (rag WPO
+                -- default 5.0 stacks on bone motion = vertex spikes; tip card default
+                -- 3.5 = the floating artifact). MID-wrapped slots are ours from a
+                -- prior pass - set directly instead of chain-wrapping.
+                local zeroed = 0
+                for i = 0, mesh:GetNumMaterials() - 1 do
+                    local m = mesh:GetMaterial(i)
+                    local mfn = (m and m:IsValid()) and m:GetFullName() or ""
+                    local mid
+                    if mfn:find("MaterialInstanceDynamic", 1, true) then
+                        mid = m
+                    elseif mfn:find("MolotovRag", 1, true) or mfn:find("RagFlame", 1, true) then
+                        mid = mesh:CreateDynamicMaterialInstance(i, m, FName("None"))
+                    end
+                    if mid and mid:IsValid() then
+                        mid:SetScalarParameterValue(FName("DroopStrength"), 0.0)
+                        zeroed = zeroed + 1
+                    end
+                end
+                log("rag physics: kick attempt " .. attempt .. " sid=" .. sid
+                    .. " simulating=" .. tostring(simulating) .. " droop0=" .. zeroed)
+                if not simulating and attempt >= 3 and sid:find("Molotov") then
+                    -- no physics state at all: PhysicsOnly wakes it (2 = ECollisionEnabled)
+                    pcall(function() mesh:SetCollisionEnabled(2) end)
+                end
+            end)
+            if not simulating and attempt < 6 then kickRagPhysics(anim, attempt + 1) end
+        end)
+    end)
+end
+
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+    kickRagPhysics(anim, 1)
     if FP_SWAP_ENABLED then
         hookGrenadeTick()   -- main-state context; HUD widget class is loaded once hands are up
         fpSwap(anim, 1)
@@ -927,12 +1068,12 @@ local function liveInstance(className)
     return nil
 end
 
-RegisterKeyBind(Key.INS, function()   -- F7 is taken by the game, U is the map
+RegisterKeyBind(Key.F7, function()   -- user pref: F7 spawn (game's F7 use tolerable)
     ExecuteInGameThread(function()
         local rk = liveInstance("CustomConsoleManagerRK")
-        if not rk then log("INS: no CustomConsoleManagerRK instance") return end
+        if not rk then log("F7: no CustomConsoleManagerRK instance") return end
         local ok, err = pcall(function() rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, 10, 1.0) end)
-        log("INS: +10 GrenadeMolotov -> " .. (ok and "ok" or tostring(err)))
+        log("F7: +10 GrenadeMolotov -> " .. (ok and "ok" or tostring(err)))
     end)
 end)
 

@@ -31,20 +31,39 @@ else:
     print("CHECK NO COLOR ATTRIBUTES — FBX lost them")
 
 # flame custom normals: loops of polys using the flame material
-flame_idx = next(
-    (i for i, m in enumerate(me.materials) if m and "RagFlame" in m.name), None
+for tag in ("RagFlame", "SheathFlame"):
+    flame_idx = next(
+        (i for i, m in enumerate(me.materials) if m and tag in m.name), None
+    )
+    print(f"CHECK {tag} material index: {flame_idx}")
+    if flame_idx is not None:
+        zs = []
+        for p in me.polygons:
+            if p.material_index == flame_idx:
+                for li in p.loop_indices:
+                    zs.append(me.loops[li].normal.z)
+        if zs:
+            print(
+                f"CHECK {tag} loop normals: n={len(zs)} min_z={min(zs):.3f} max_z={max(zs):.3f}"
+            )
+        else:
+            print(f"CHECK no {tag} polys found")
+# static twin: helpers stripped, flame normals intact after the edit-mode delete
+bpy.ops.import_scene.fbx(
+    filepath=r"c:\Code\westerfield.cloud\Gaming\stalker-2\asset-pipeline\out\SM_MolotovBottle.fbx"
 )
-print(f"CHECK flame material index: {flame_idx}")
-if flame_idx is not None:
-    zs = []
-    for p in me.polygons:
-        if p.material_index == flame_idx:
-            for li in p.loop_indices:
-                zs.append(me.loops[li].normal.z)
-    if zs:
-        print(
-            f"CHECK flame loop normals: n={len(zs)} min_z={min(zs):.3f} max_z={max(zs):.3f}"
-        )
-    else:
-        print("CHECK no flame polys found")
+sm = next(o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith("SM_"))
+sme = sm.data
+print(f"CHECK SM verts={len(sme.vertices)} polys={len(sme.polygons)}")
+assert len(sme.vertices) == len(me.vertices) - 6, "phys helpers leaked into SM twin"
+for tag in ("RagFlame", "SheathFlame"):
+    fi = next((i for i, m in enumerate(sme.materials) if m and tag in m.name), None)
+    zs = [
+        sme.loops[li].normal.z
+        for p in sme.polygons
+        if p.material_index == fi
+        for li in p.loop_indices
+    ]
+    print(f"CHECK SM {tag} loop normals: n={len(zs)} min_z={min(zs):.3f}")
+    assert min(zs) > 0.99, f"SM {tag} custom normals lost in helper strip"
 print("CHECK_DONE")

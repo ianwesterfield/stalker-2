@@ -1,7 +1,7 @@
 # S.T.A.L.K.E.R. 2 modding notes — everything we learned the hard way
 
-Reference distilled from the molotov build (2026-10). The README covers *what* the mod is;
-this is the *how* and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS 3.0.1-experimental.
+Reference distilled from the molotov build (2026-10). The README covers _what_ the mod is;
+this is the _how_ and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS 3.0.1-experimental.
 
 ## Game data layer
 
@@ -35,7 +35,7 @@ this is the *how* and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS
   `RK:XApplyEffectOnNPCByUID("MolotovBurning", uid)`.
 - `TimeToExplode` counts from **release** (no cook-off while held).
 - `ExplosionPrototype` has separate ground / **InAir** / Underwater VFX slots — override
-  ground *and* in-air, short fuses airburst.
+  ground _and_ in-air, short fuses airburst.
 - Raw-spawning anomaly BPs (`BP_ClassicFireAnomaly_C`) = native AV that `pcall` cannot catch
   (they need spawner-system context). `BP_BonFire_C` and friends are self-contained and safe.
 
@@ -45,11 +45,11 @@ this is the *how* and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS
 
 GSC/UE's importer scales **geometry** by the FBX unit header but reads **bone numerics raw**:
 
-| Export                        | Result                                        |
-| ----------------------------- | --------------------------------------------- |
-| meter numerics, meter header  | bind pose cooked ÷100 → invisible mesh        |
-| cm numerics, meter header     | 26 m bottle                                   |
-| **cm numerics, cm header**    | **bit-identical to vanilla grenades** ✔       |
+| Export                       | Result                                  |
+| ---------------------------- | --------------------------------------- |
+| meter numerics, meter header | bind pose cooked ÷100 → invisible mesh  |
+| cm numerics, meter header    | 26 m bottle                             |
+| **cm numerics, cm header**   | **bit-identical to vanilla grenades** ✔ |
 
 Winning recipe in [build_molotov.py](../asset-pipeline/build_molotov.py): bake
 `Matrix.Scale(100)` into armature **and** mesh data (edit mode), clear delta transforms
@@ -116,7 +116,7 @@ cooks (stale pak cache).
 - Flame material must **mirror the rag's** DroopStrength/flutter constants or the fire
   detaches from the cloth. Gravity re-point `(world_up − VertexNormalWS) × height` must be
   clamped (±0.75/axis) or an inverted tumbling bottle flings the flame ~28 cm off the mesh.
-- **FP FOV seating**: GSC does foreground FOV warp *in material graphs* —
+- **FP FOV seating**: GSC does foreground FOV warp _in material graphs_ —
   `MF_Foreground_FOVCorrection` (core HLSL), `MF_Foreground` (+anti-depth-clip),
   `MF_ForegroundWithShadowSwitch` (+shadow replace + MPC gate). Feed `Foreground FOV` from
   **`MPC_FOV` param `TanFOV`**, not a material FOV node (unit mismatch = floating mesh).
@@ -163,4 +163,4 @@ cooks (stale pak cache).
 - Mechanically-generated cfg text can be **silently ignored** (parse failure); hand-written
   edits parsed. Byte-surgical line edits beat regex spans.
 - Achievements: the "mods disable achievements" gate is mod.io-subsystem only. UE4SS + paks
-  + console verbs are below the detection floor. Never ship via the in-game mod.io browser.
+  - console verbs are below the detection floor. Never ship via the in-game mod.io browser.
