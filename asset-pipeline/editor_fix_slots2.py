@@ -9,6 +9,7 @@ ASSIGN = {
     "MI_cns_cossacks_vodka_01_02": f"{GAME_MATS}/MI_cns_cossacks_vodka_01_02",
     "MI_molotov_rag": f"{PLUGIN}/M_MolotovRag",
     "M_RagFlame": f"{PLUGIN}/M_RagFlame",
+    "M_SheathFlame": f"{PLUGIN}/M_SheathFlame",
 }
 
 sk = unreal.EditorAssetLibrary.load_asset(f"{PLUGIN}/SK_MolotovBottle")
