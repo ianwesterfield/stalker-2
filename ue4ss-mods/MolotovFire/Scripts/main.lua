@@ -1072,12 +1072,16 @@ ragFire = function(anim, attempt)
                 if not (comp and comp:IsValid()) then log("ragfire: AddComponentByClass failed") return end
                 comp:SetAsset(ns, true)
                 pcall(function() comp:SetFirstPersonPrimitiveType(1) end)
-                comp:K2_AttachToComponent(mesh, FName("None"), 2, 2, 0, false)
+                -- jnt_fuse = rag bone; root attach put the spawn volume on the grip/hand
+                comp:K2_AttachToComponent(mesh, FName("jnt_fuse"), 2, 2, 0, false)
                 comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
                 pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
-                -- lit smoke sprites render as a giant black card in unlit caves
-                pcall(function() comp:SetEmitterEnable(FName("smoke_4"), false) end)
                 pcall(function() comp:Activate(true) end)
+                -- lit smoke sprites = giant black card in unlit caves; only works on a
+                -- LIVE instance (post-Activate), and handle name is uncertain -> try all
+                for _, en in ipairs({ "smoke_4", "smoke", "Smoke", "smoke001" }) do
+                    pcall(function() comp:SetEmitterEnable(FName(en), false) end)
+                end
                 fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 log("ragfire: lit attempt " .. attempt .. " (" .. nsPath:match("([^/]+)$") .. ")")
             end)
