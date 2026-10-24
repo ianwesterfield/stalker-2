@@ -33,7 +33,9 @@ if handles is None:
                 uniq = obj.get_editor_property("unique_emitter_name")
             except Exception:
                 pass
-            unreal.log(f"[handles] emitter obj={obj.get_name()} unique={uniq} path={obj.get_path_name()}")
+            unreal.log(
+                f"[handles] emitter obj={obj.get_name()} unique={uniq} path={obj.get_path_name()}"
+            )
         except Exception:
             pass
 else:
