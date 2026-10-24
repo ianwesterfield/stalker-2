@@ -2,13 +2,13 @@ FBX version: 7300
 armature scale=(1.0, 1.0, 1.0) loc=(0.0, 0.0, 0.0)
 jnt_offset head_local: (0.0, 0.0, 0.0)
 bones: ['jnt_hammer', 'jnt_l_hand', 'jnt_offset', 'jnt_r_hand', 'jnt_ring', 'jnt_safety_check', 'jnt_sear', 'jnt_sear_m1', 'jnt_sear_m2', 'jnt_wire1', 'jnt_wire2', 'jnt_wire3', 'jnt_wire4']
-13:15:29 | INFO: Data are loaded, start creating Blender stuff
-13:15:29 | INFO: Blender create Mesh node SK_ZoneGrenadeBottle
-13:15:29 | INFO: glTF import finished in 0.02s
+15:45:43 | INFO: Data are loaded, start creating Blender stuff
+15:45:43 | INFO: Blender create Mesh node SK_ZoneGrenadeBottle
+15:45:43 | INFO: glTF import finished in 0.02s
 ZG bottle bbox: lo=(-0.0340,-0.0340,-0.1294) hi=(0.0340,0.0340,0.1233)
-13:15:29 | INFO: Data are loaded, start creating Blender stuff
-13:15:29 | INFO: Blender create Mesh node SM_cns_cossacks_vodka_01_c
-13:15:29 | INFO: glTF import finished in 0.00s
+15:45:43 | INFO: Data are loaded, start creating Blender stuff
+15:45:43 | INFO: Blender create Mesh node SM_cns_cossacks_vodka_01_c
+15:45:43 | INFO: glTF import finished in 0.00s
 C:\Code\westerfield.cloud\Gaming\stalker-2\asset-pipeline\build_molotov.py:156: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
   mat.use_nodes = True
 SM bottle bbox: lo=(-0.0360,-0.0352,-0.0007) hi=(0.0349,0.0348,0.2542)
@@ -27,12 +27,12 @@ TRACE cm bake: dims=(11.15, 9.53, 55.84)
 
 FBX export starting... 'c:\\Code\\westerfield.cloud\\Gaming\\stalker-2\\asset-pipeline\\out\\SK_MolotovBottle.fbx'
 (bpy.data.armatures['jnt_wpn_rgd5'], 'POSE')
-export finished in 0.0196 sec.
+export finished in 0.0213 sec.
 exported c:\Code\westerfield.cloud\Gaming\stalker-2\asset-pipeline\out\SK_MolotovBottle.fbx
 TRACE phys helpers stripped: verts=2972
 
 FBX export starting... 'c:\\Code\\westerfield.cloud\\Gaming\\stalker-2\\asset-pipeline\\out\\SM_MolotovBottle.fbx'
-export finished in 0.0134 sec.
+export finished in 0.0150 sec.
 exported c:\Code\westerfield.cloud\Gaming\stalker-2\asset-pipeline\out\SM_MolotovBottle.fbx
 done
 Blender 5.2.2 LTS (hash d13f752e3b9c built 2026-09-15 01:37:04)
