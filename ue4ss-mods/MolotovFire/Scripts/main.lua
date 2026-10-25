@@ -1077,16 +1077,20 @@ ragFire = function(anim, attempt)
                 comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
                 pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
                 pcall(function() comp:Activate(true) end)
-                -- lit smoke sprites = giant black card in unlit caves; activation can
-                -- defer instance creation, so disable now AND once more shortly after
-                local function noSmoke(tag)
+                -- embers001_1 + NiagaraEmitter_2 render M_DefaultSprite (no runtime
+                -- material binding when raw-spawned) = opaque black cards w/ white dot;
+                -- smoke_4 = lit smoke, black in unlit caves. fire001_1 is the keeper.
+                -- activation can defer the instance, so disable now AND shortly after
+                local function trimEmitters(tag)
                     if not (comp and comp:IsValid()) then return end
-                    local okE, errE = pcall(function() comp:SetEmitterEnable(FName("smoke_4"), false) end)
-                    log("ragfire: smoke_4 off (" .. tag .. ") -> " .. (okE and "ok" or tostring(errE)))
+                    for _, en in ipairs({ "smoke_4", "embers001_1", "NiagaraEmitter_2" }) do
+                        local okE, errE = pcall(function() comp:SetEmitterEnable(FName(en), false) end)
+                        if not okE then log("ragfire: " .. en .. " off (" .. tag .. ") ERR " .. tostring(errE)) end
+                    end
                 end
-                noSmoke("immediate")
+                trimEmitters("immediate")
                 ExecuteWithDelay(250, function()
-                    ExecuteInGameThread(function() noSmoke("delayed") end)
+                    ExecuteInGameThread(function() trimEmitters("delayed") end)
                 end)
                 fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 log("ragfire: lit attempt " .. attempt .. " (" .. nsPath:match("([^/]+)$") .. ")")
