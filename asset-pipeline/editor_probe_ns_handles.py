@@ -38,6 +38,27 @@ if handles is None:
             )
         except Exception:
             pass
+    # renderer properties are outered to their emitter: name the material each renders
+    for obj in unreal.ObjectIterator():
+        try:
+            if "NS_Character_Fire" not in obj.get_path_name():
+                continue
+            cls = type(obj).__name__
+            if "RendererProperties" not in cls:
+                continue
+            mat = None
+            for mp in ("material", "Material"):
+                try:
+                    mat = obj.get_editor_property(mp)
+                    break
+                except Exception:
+                    pass
+            unreal.log(
+                f"[handles] renderer {cls} outer={obj.get_outer().get_name() if obj.get_outer() else '?'} "
+                f"mat={mat.get_path_name() if mat else None} path={obj.get_path_name()}"
+            )
+        except Exception:
+            pass
 else:
     for i, h in enumerate(handles):
         name = "?"
