@@ -66,9 +66,14 @@ Techniques worth stealing:
 
 [MolotovFire](ue4ss-mods/MolotovFire/Scripts/main.lua): impact detonation via the grenade's hit
 event (vanilla `BP_grenade` is timer-only), ground fire patches spawned from `BP_BonFire` with
-staggered lifetimes, soft-landing fuse fallback, debug spawn keybind (F7), the burning-rag fire
-itself (`NS_Character_Fire` attached to `jnt_fuse`, doused on throw), the rag physics kick
-(pooled weapon meshes never create physics state on their own), and flight-look material pinning.
+staggered lifetimes, soft-landing fuse fallback, the burning-rag fire itself
+(`NS_Character_Fire` attached to `jnt_fuse`, doused on throw), the rag physics kick
+(pooled weapon meshes never create physics state on their own), flight-look material pinning,
+and two field rules: **drop-to-craft** (drop a vodka from the backpack view → the bottle is
+consumed and a molotov takes its place; the game's own drop flow does the inventory math and
+`XDestroyModel` eats the dropped bottle — crafting costs you the menu trip, not a hotkey) and a
+**hold singe** — while the rag burns in hand you slowly take Burn damage (`XDealDamage`,
+~0.33 HP/s, floored so it can't kill you). Throw it or put it away.
 
 Diagnosis kit (UE4SS console `dofile`, bottle equipped):
 [droop.lua](ue4ss-mods/MolotovFire/Scripts/droop.lua) `PARAM="X" VAL=n` scalar params on the
@@ -116,10 +121,12 @@ translation cooks "successfully" and ships as the checkerboard.
 ## In-game test checklist
 
 1. Launch (cfg pak in `~mods` and `MolotovBottle` plugin paks load automatically; UE4SS mods via `enabled.txt`).
-2. Buy from the Zalissya bartender (restocks on timer; sleep/wait if absent).
+2. Buy from the Zalissya bartender (restocks on timer; sleep/wait if absent) — or open the
+   backpack and **drop a vodka**: bottle gone, molotov in its place.
 3. Equip grenades and **cycle the grenade slot** — the molotov is its own grenade type.
 4. In hand: bottle with cloth plug, physics rag tail swinging with movement, Niagara fire +
-   smoke riding the rag, all seated on the hand and following every animation.
+   smoke riding the rag, all seated on the hand and following every animation — and your HP
+   slowly ticking down (hold singe) until you throw or holster.
 5. Throw: fire douses as the bottle leaves the hand; impact fireball + ground fire patches;
    victims tick burn damage.
 6. Drop it: static bottle twin in the world.
