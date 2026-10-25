@@ -1134,7 +1134,12 @@ LoopAsync(500, function()
     return false
 end)
 
--- F7: prototype-registration oracle — call the dev cheat UFunctions directly.
+-- Drop-to-craft: dropping vodka from the backpack IS the craft gesture — the
+-- game's own drop flow does the inventory math (no remove-item verb exists;
+-- negative Count on the add verb no-ops, proven in-game). The Obj:DropItem
+-- pre-hook captures the item UID while it's still in inventory; a vodka-count
+-- delta 400ms later proves what left; XDestroyModel eats the dropped bottle
+-- and the molotov grant is the yield. Costs a backpack visit by design.
 
 local function liveInstance(className)
     local all = FindAllOf(className)
@@ -1147,13 +1152,102 @@ local function liveInstance(className)
     return nil
 end
 
-RegisterKeyBind(Key.F7, function()   -- user pref: F7 spawn (game's F7 use tolerable)
+local craft = { uid = 0, before = -1, busy = false }
+
+local function craftResolve()
     ExecuteInGameThread(function()
-        local rk = liveInstance("CustomConsoleManagerRK")
-        if not rk then log("F7: no CustomConsoleManagerRK instance") return end
-        local ok, err = pcall(function() rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, 10, 1.0) end)
-        log("F7: +10 GrenadeMolotov -> " .. (ok and "ok" or tostring(err)))
+        local ok, err = pcall(function()
+            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+            local rk = liveInstance("CustomConsoleManagerRK")
+            local ai2 = liveInstance("CustomConsoleManagerAI2")   -- owns XDestroyModel
+            local pawn
+            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+            if not (cm and cm:IsValid() and rk and ai2 and pawn and pawn:IsValid()) then
+                log("craft: resolve missing cm/rk/ai2/pawn")
+                return
+            end
+            local after = cm:GetItemsCountInInventory(pawn, "Vodka")
+            if type(after) ~= "number" then return end
+            local delta = craft.before - after
+            if delta < 1 then
+                log(string.format("craft: drop was not vodka (count %d -> %d)", craft.before, after))
+                return
+            end
+            if craft.uid ~= 0 then ai2:XDestroyModel(craft.uid) end
+            rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, delta, 1.0)
+            log(string.format("craft: %d vodka rag-wrapped -> %d molotov (bottle uid %d destroyed)",
+                delta, delta, craft.uid))
+        end)
+        craft.busy = false
+        if not ok then log("craft ERR: " .. tostring(err)) end
     end)
+end
+
+local okHook, errHook = pcall(function()
+    RegisterHook("/Script/Stalker2.Obj:DropItem", function(selfParam, uidParam)
+        pcall(function()
+            local dropper = selfParam:get()
+            local pawn
+            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+            if not (dropper and dropper:IsValid() and pawn and pawn:IsValid()) then return end
+            if dropper:GetFullName() ~= pawn:GetFullName() then return end   -- NPC drops don't craft
+            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+            if not (cm and cm:IsValid()) then return end
+            if craft.busy then return end   -- one rag at a time
+            local uid = 0
+            pcall(function() uid = uidParam:get().UID end)
+            craft.uid = type(uid) == "number" and uid or 0
+            craft.before = cm:GetItemsCountInInventory(pawn, "Vodka")
+            if type(craft.before) ~= "number" then craft.before = -1 return end
+            -- diagnostic: if 'vodka N' here is already decremented, move the
+            -- baseline to a cached pre-drop count
+            log(string.format("craft: player drop seen (uid %d, vodka %d)", craft.uid, craft.before))
+            craft.busy = true
+            ExecuteWithDelay(400, craftResolve)
+        end)
+    end)
+end)
+if okHook then
+    log("craft hook armed on Obj:DropItem")
+else
+    log("craft hook FAILED: " .. tostring(errHook))
+end
+
+-- Holding the lit bottle singes: slow HP drain while the rag fire burns in hand.
+-- Gate = fp.rag (the Niagara fire is literally lit; douse paths clear it on throw
+-- and holster). XDealDamage hits by UID; Type 1 = EDamageType::Burn. The floor
+-- keeps carelessness painful but never lethal.
+local HOLD_BURN_HP = 0.5         -- per tick
+local HOLD_BURN_PERIOD = 1500    -- ms between ticks (~0.33 HP/s)
+local HOLD_BURN_FLOOR = 8.0      -- stop singeing below this HP
+local holdBurnN = 0
+
+LoopAsync(HOLD_BURN_PERIOD, function()
+    if not fp.rag then
+        holdBurnN = 0
+        return false
+    end
+    ExecuteInGameThread(function()
+        pcall(function()
+            if not (fp.rag and fp.rag:IsValid()) then return end
+            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+            local rk = liveInstance("CustomConsoleManagerRK")
+            local pawn
+            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+            if not (cm and cm:IsValid() and rk and pawn and pawn:IsValid()) then return end
+            local hp = cm:ObjGetHP(pawn)
+            if type(hp) == "number" and hp <= HOLD_BURN_FLOOR then return end
+            local uid = cm:GetGUID(pawn)
+            if type(uid) ~= "number" or uid == 0 then return end
+            rk:XDealDamage(uid, HOLD_BURN_HP, 0.0, 0.0, 0.0, 0.0, 1, "")
+            holdBurnN = holdBurnN + 1
+            if holdBurnN == 1 or holdBurnN % 20 == 0 then
+                log(string.format("hold-burn: tick %d (hp %s)", holdBurnN,
+                    type(hp) == "number" and string.format("%.1f", hp) or "?"))
+            end
+        end)
+    end)
+    return false
 end)
 
 local function posStep() return fineStep and 0.5 or 2 end
