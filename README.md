@@ -35,11 +35,13 @@ there was already this much vodka lying around.
 
 ## Custom bottle asset (the fun part)
 
-One Blender script — [asset-pipeline/build_molotov.py](asset-pipeline/build_molotov.py) — builds
-the whole asset headlessly: cossack-vodka bottle on the RGD-5 grenade skeleton, cloth plug with a
-hanging rag tail, and skinned flame cards (orange cap at the plug, faint blue alcohol burn down
-the wick). The `editor_*.py` scripts run inside Zone Kit's Python console to reimport, assign
-material slots, and build/tune the materials.
+One command — [asset-pipeline/pipeline.ps1](asset-pipeline/pipeline.ps1) — builds the whole asset
+headlessly: Blender mesh build → FBX sanity checks → preview renders → Zone Kit headless editor
+import (materials, slots, physics) → cook → deploy. The asset is a cossack-vodka bottle on the
+RGD-5 grenade skeleton with a cloth plug and a physics-simulated rag tail on its own bone
+(`jnt_fuse`); the burning rag is the game's own `NS_Character_Fire` Niagara system attached at
+runtime. The old skinned flame cards ship invisible (`OpacityBoost 0`) but keep their
+geometry/slots so the flight-look and physics code stay stable.
 
 Techniques worth stealing:
 
@@ -49,9 +51,13 @@ Techniques worth stealing:
 - **FP seating** — first-person weapons need GSC's foreground-FOV WPO correction
   (`MF_ForegroundWithShadowSwitch` fed from `MPC_FOV`'s `TanFOV`) or the mesh floats off the hand.
   The additive flame uses the core `MF_Foreground_FOVCorrection` only (the full switch streaks).
-- **Flame = skinned geometry + animated material.** Cards hijack custom normals as a flame axis;
-  the material re-points tongues world-up (clamped ±0.75/axis so a tumbling thrown bottle doesn't
-  fling the fire off the mesh), sways, droops, and flutters in sync with the rag's cloth WPO.
+- **Flame = the game's own Niagara fire.** `NS_Character_Fire` attached to the rag bone at runtime
+  beats every hand-built flame card we tried. The card materials remain as invisible stubs — and
+  taught the big lesson: Zone Kit's Python `MaterialProperty` enum is stripped (no WPO pin, no
+  `MP_MATERIAL_ATTRIBUTES`), and wiring a graph to `MP_FRONT_MATERIAL` (the Substrate pin)
+  "compiles clean" into an **empty shader** — emissive black, opacity 1.0, every param compiled
+  out. Non-Substrate game ⇒ classic pins only (`MP_EMISSIVE_COLOR`, `MP_OPACITY`), and assert
+  every `connect_material_property`.
 - **Vertex colors as data bus** — R = droop weight, G = solidify shell sign, B = bend height,
   A = orange↔blue tint lerp. Note: `VertexColor`'s RGB output is float3 — take alpha from the
   dedicated `A` pin or the cook's shader translation fails (the editor won't warn you).
@@ -60,8 +66,15 @@ Techniques worth stealing:
 
 [MolotovFire](ue4ss-mods/MolotovFire/Scripts/main.lua): impact detonation via the grenade's hit
 event (vanilla `BP_grenade` is timer-only), ground fire patches spawned from `BP_BonFire` with
-staggered lifetimes, soft-landing fuse fallback, and debug spawn keybinds. The FP mesh-swap and
-Niagara-flame paths in there are retired fallbacks — the baked asset made them obsolete.
+staggered lifetimes, soft-landing fuse fallback, debug spawn keybind (F7), the burning-rag fire
+itself (`NS_Character_Fire` attached to `jnt_fuse`, doused on throw), the rag physics kick
+(pooled weapon meshes never create physics state on their own), and flight-look material pinning.
+
+Diagnosis kit (UE4SS console `dofile`, bottle equipped):
+[droop.lua](ue4ss-mods/MolotovFire/Scripts/droop.lua) `PARAM="X" VAL=n` scalar params on the
+rag/flame MIDs · [hide.lua](ue4ss-mods/MolotovFire/Scripts/hide.lua) `SLOT=n SHOW=0/1` geometry
+kill switch · [emit.lua](ue4ss-mods/MolotovFire/Scripts/emit.lua) Niagara emitter dump/toggle ·
+[matprobe.lua](ue4ss-mods/MolotovFire/Scripts/matprobe.lua) cooked-material fingerprint.
 
 ## Pipeline
 
@@ -73,11 +86,10 @@ scripts/pack-mod.ps1           # mod/ -> build/MolotovCocktail_P.pak (repak V11,
 scripts/deploy-mod.ps1         # copy into <game>/Stalker2/Content/Paks/~mods  (-Remove uninstalls)
 scripts/deploy-ue4ss.ps1       # sync ue4ss-mods/ -> <game>/Stalker2/Binaries/Win64/ue4ss/Mods
 
-# bottle asset (Zone Kit required)
-blender -b -P asset-pipeline/build_molotov.py        # headless: mesh + FBX pair + vertex data
-# in Zone Kit:  py editor_reimport_sk.py  /  py editor_fix_slots2.py  (+ material scripts as needed)
-# cook: RunUAT GSCCookModNewContent -CustomConfig=ModCookNewContent (editor closed)
-# deploy: staged pak/ucas/utoc -> <game>/Stalker2/Mods/MolotovBottle/Content/Paks/Windows
+# bottle asset (Zone Kit required; editor and game closed)
+asset-pipeline/pipeline.ps1    # Blender -> checks -> previews -> headless editor -> cook -> deploy
+#   -SkipBlender -SkipPreviews -SkipEditor -SkipCook -SkipDeploy for partial runs
+#   gates on log sentinels (HEADLESS_ALL_DONE, *_MAT_DONE, ...) because UE exit codes lie
 ```
 
 Prereqs: repak (`C:\Tools\repak`), Python 3.11 + `pylocres`, Blender 5.x, STALKER 2 Zone Kit
@@ -106,16 +118,17 @@ translation cooks "successfully" and ships as the checkerboard.
 1. Launch (cfg pak in `~mods` and `MolotovBottle` plugin paks load automatically; UE4SS mods via `enabled.txt`).
 2. Buy from the Zalissya bartender (restocks on timer; sleep/wait if absent).
 3. Equip grenades and **cycle the grenade slot** — the molotov is its own grenade type.
-4. In hand: bottle with cloth plug, drooping rag tail, orange flame cap + blue wick burn,
-   all seated on the hand and following every animation.
-5. Throw: flame stays on the bottle through the tumble; impact fireball + ground fire patches;
+4. In hand: bottle with cloth plug, physics rag tail swinging with movement, Niagara fire +
+   smoke riding the rag, all seated on the hand and following every animation.
+5. Throw: fire douses as the bottle leaves the hand; impact fireball + ground fire patches;
    victims tick burn damage.
 6. Drop it: static bottle twin in the world.
 
 ## Known limitations / next ideas
 
 - Inventory icon is still the vanilla Dvupalov vodka icon (`IIT_DvupalovVodka`) — custom icon pending.
-- Thrown-bottle flame points world-up (candle behavior) rather than trailing the flight path.
+- In-flight bottle shows no flame (card flames retired; candidate: attach the Niagara fire to
+  the thrown grenade actor).
 - The `MolotovBottle` plugin paks must be cooked locally with Zone Kit; they're not committed.
 - English locres only; add `localization.<lang>.csv` and pass `-Languages` to extend.
 - After a game patch: re-run `build-locres.ps1` + `pack-mod.ps1` + `deploy-mod.ps1`

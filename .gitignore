@@ -4,6 +4,9 @@ extracted/
 # Packed output staging (final .pak is reproducible from mod/ + scripts/)
 build/
 
+# Asset pipeline build artifacts — pipeline.ps1 regenerates everything here
+asset-pipeline/out/
+
 __pycache__/
 *.bak
 Thumbs.db
