@@ -1077,9 +1077,11 @@ ragFire = function(anim, attempt)
                 comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
                 pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
                 pcall(function() comp:Activate(true) end)
-                -- all 4 emitters kept (Fire001/embers/embers001/smoke): live A/B 2026-10-24
-                -- proved none of them is the black card — that's the mesh flame shells
-                -- (slots 3/4), killed via OpacityBoost 0.0 in the cooked material
+                -- smoke off on the HELD fire only: it is a lit translucent sprite
+                -- spawning at the rag bone, so sprinting pushes the camera through it
+                -- and blanks the view for a frame. Must follow Activate — SetEmitterEnable
+                -- before the system is live is a silent no-op.
+                pcall(function() comp:SetEmitterEnable(FName("smoke"), false) end)
                 fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 log("ragfire: lit attempt " .. attempt .. " (" .. nsPath:match("([^/]+)$") .. ")")
             end)
@@ -1134,13 +1136,8 @@ LoopAsync(500, function()
     return false
 end)
 
--- Drop-to-craft: dropping vodka from the backpack IS the craft gesture — the
--- game's own drop flow does the inventory math (no remove-item verb exists;
--- negative Count on the add verb no-ops, proven in-game). The Obj:DropItem
--- pre-hook captures the item UID while it's still in inventory; a vodka-count
--- delta 400ms later proves what left; XDestroyModel eats the dropped bottle
--- and the molotov grant is the yield. Costs a backpack visit by design.
-
+-- Finds a live (non-CDO) instance of a native class; the console managers are
+-- only usable this way.
 local function liveInstance(className)
     local all = FindAllOf(className)
     if all then
@@ -1150,67 +1147,6 @@ local function liveInstance(className)
         end
     end
     return nil
-end
-
-local craft = { uid = 0, before = -1, busy = false }
-
-local function craftResolve()
-    ExecuteInGameThread(function()
-        local ok, err = pcall(function()
-            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
-            local rk = liveInstance("CustomConsoleManagerRK")
-            local ai2 = liveInstance("CustomConsoleManagerAI2")   -- owns XDestroyModel
-            local pawn
-            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
-            if not (cm and cm:IsValid() and rk and ai2 and pawn and pawn:IsValid()) then
-                log("craft: resolve missing cm/rk/ai2/pawn")
-                return
-            end
-            local after = cm:GetItemsCountInInventory(pawn, "Vodka")
-            if type(after) ~= "number" then return end
-            local delta = craft.before - after
-            if delta < 1 then
-                log(string.format("craft: drop was not vodka (count %d -> %d)", craft.before, after))
-                return
-            end
-            if craft.uid ~= 0 then ai2:XDestroyModel(craft.uid) end
-            rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, delta, 1.0)
-            log(string.format("craft: %d vodka rag-wrapped -> %d molotov (bottle uid %d destroyed)",
-                delta, delta, craft.uid))
-        end)
-        craft.busy = false
-        if not ok then log("craft ERR: " .. tostring(err)) end
-    end)
-end
-
-local okHook, errHook = pcall(function()
-    RegisterHook("/Script/Stalker2.Obj:DropItem", function(selfParam, uidParam)
-        pcall(function()
-            local dropper = selfParam:get()
-            local pawn
-            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
-            if not (dropper and dropper:IsValid() and pawn and pawn:IsValid()) then return end
-            if dropper:GetFullName() ~= pawn:GetFullName() then return end   -- NPC drops don't craft
-            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
-            if not (cm and cm:IsValid()) then return end
-            if craft.busy then return end   -- one rag at a time
-            local uid = 0
-            pcall(function() uid = uidParam:get().UID end)
-            craft.uid = type(uid) == "number" and uid or 0
-            craft.before = cm:GetItemsCountInInventory(pawn, "Vodka")
-            if type(craft.before) ~= "number" then craft.before = -1 return end
-            -- diagnostic: if 'vodka N' here is already decremented, move the
-            -- baseline to a cached pre-drop count
-            log(string.format("craft: player drop seen (uid %d, vodka %d)", craft.uid, craft.before))
-            craft.busy = true
-            ExecuteWithDelay(400, craftResolve)
-        end)
-    end)
-end)
-if okHook then
-    log("craft hook armed on Obj:DropItem")
-else
-    log("craft hook FAILED: " .. tostring(errHook))
 end
 
 -- Holding the lit bottle singes: slow HP drain while the rag fire burns in hand.
@@ -1415,6 +1351,178 @@ tuneBind(Key.OEM_MINUS, function() queueNudge({ "rot", "rz", -1 }) end)
 tuneBind(Key.OEM_PLUS, function() queueNudge({ "rot", "rz", 1 }) end)
 tuneBind(Key.V, function() queueNudge({ "vis" }) end)
 tuneBind(Key.K, function() queueNudge({ "lock" }) end)
+
+-- Craft chain probes. Logs all three counts so a partial run (vodka taken but no
+-- molotov) is distinguishable from the If gate refusing outright.
+-- The backpack never repaints when items change underneath it, so a craft looks
+-- like it did nothing until you close the screen. Nudge the live widget instead.
+-- SortInventory would also rebuild but reorders the player's pack, so it is out.
+-- Repaint the backpack after we edit it. Only ever called from the craft path,
+-- where the player is demonstrably standing in an open inventory: the 3:10pm
+-- crash came from bursting this during a firefight (bandaging moves the kit in
+-- and out), poking a torn-down widget. pcall cannot catch that AV, so the guard
+-- has to be "is it actually on screen", not a try/catch.
+-- Only UpdateInputDependent: OnVisibilityChangedEvent is an engine-fed handler.
+local function nudgeInventoryUI()
+    local inv
+    pcall(function() inv = liveInstance("InventoryNew") end)
+    if not (inv and inv:IsValid()) then return end
+    local visible = false
+    pcall(function() visible = inv:IsVisible() end)
+    if not visible then return end
+    pcall(function() inv:UpdateInputDependent() end)
+end
+
+-- The quest chain lands one node at a time, so repaint across the whole window.
+local function nudgeBurst(count, interval)
+    for i = 0, count - 1 do
+        ExecuteWithDelay(i * interval, function()
+            ExecuteInGameThread(function() pcall(nudgeInventoryUI) end)
+        end)
+    end
+end
+
+local function craftFire(tag, sid, done)
+    ExecuteInGameThread(function()
+        local ok, err = pcall(function()
+            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+            local aa = liveInstance("CustomConsoleManagerAA")
+            local pawn
+            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+            if not (aa and cm and cm:IsValid() and pawn and pawn:IsValid()) then
+                log("craft: missing aa/cm/pawn")
+                if done then done() end
+                return
+            end
+            local function counts()
+                return cm:GetItemsCountInInventory(pawn, "Vodka"),
+                       cm:GetItemsCountInInventory(pawn, "Bandage"),
+                       cm:GetItemsCountInInventory(pawn, "GrenadeMolotov")
+            end
+            local v0, b0, m0 = counts()
+            log(string.format("craft[%s]: before vodka=%s bandage=%s molotov=%s",
+                tag, tostring(v0), tostring(b0), tostring(m0)))
+            local okC, errC = pcall(function() aa:XStartQuestNodeBySID(sid) end)
+            if not okC then log("craft: call ERR " .. tostring(errC)) end
+            nudgeBurst(12, 250)
+            ExecuteWithDelay(900, function()
+                ExecuteInGameThread(function()
+                    local v1, b1, m1 = counts()
+                    log(string.format("craft[%s]: after  vodka=%s bandage=%s molotov=%s",
+                        tag, tostring(v1), tostring(b1), tostring(m1)))
+                    if type(m1) == "number" and type(m0) == "number" and m1 > m0 then
+                        log("craft: SUCCESS - rag-wrapped a bottle")
+                    else
+                        log("craft: no molotov granted")
+                    end
+                    pcall(nudgeInventoryUI)
+                    if done then done() end
+                end)
+            end)
+        end)
+        if not ok then
+            log("craft ERR: " .. tostring(err))
+            if done then done() end
+        end
+    end)
+end
+
+-- Skif knows the recipe, so the kit is his: it appears in the pack whenever the
+-- ingredients are on hand and is taken back when they are not. The game has no
+-- "unusable item" state to grey out, so presence is the affordance.
+-- The quest's If gate does NOT block when fired directly (it ran the True branch
+-- on an empty pack), so the ingredient check is enforced here.
+local KIT_SID = "MolotovKit"
+local kitWatch = { last = nil, busy = false }
+
+local function fireNode(sid)
+    local aa = liveInstance("CustomConsoleManagerAA")
+    if aa then pcall(function() aa:XStartQuestNodeBySID(sid) end) end
+end
+
+local function grantKit()
+    local rk = liveInstance("CustomConsoleManagerRK")
+    if rk then pcall(function() rk:XCreateItemInInventoryByID(KIT_SID, 0, 1, 1.0) end) end
+end
+
+-- hold the latch until the pack settles, so our own edit is not read as a use
+local function kitSettle(cm, pawn)
+    ExecuteWithDelay(500, function()
+        ExecuteInGameThread(function()
+            pcall(function() kitWatch.last = cm:GetItemsCountInInventory(pawn, KIT_SID) end)
+            kitWatch.busy = false
+        end)
+    end)
+end
+
+local function kitPoll()
+    if kitWatch.busy then return end
+    local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+    local pawn
+    pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+    if not (cm and cm:IsValid() and pawn and pawn:IsValid()) then return end
+    local kit = cm:GetItemsCountInInventory(pawn, KIT_SID)
+    local vodka = cm:GetItemsCountInInventory(pawn, "Vodka")
+    local bandage = cm:GetItemsCountInInventory(pawn, "Bandage")
+    if type(kit) ~= "number" then return end
+
+    local prev = kitWatch.last
+    kitWatch.last = kit
+    local ready = type(vodka) == "number" and type(bandage) == "number"
+        and vodka >= 1 and bandage >= 1
+
+    -- a use is only the player's when the kit was there and the pack was ready
+    if prev and kit < prev and ready then
+        kitWatch.busy = true
+        log(string.format("craft: kit used (vodka=%d bandage=%d)", vodka, bandage))
+        -- hand the kit straight back, before the craft runs, so it is missing for
+        -- one poll rather than the whole chain
+        grantKit()
+        -- fire the removals directly: the If gate adds a hop and does not gate anyway
+        craftFire("kit", "MolotovCraft_TakeVodka", function()
+            nudgeBurst(6, 250)
+            kitSettle(cm, pawn)
+        end)
+        return
+    end
+
+    -- otherwise keep the kit's presence in step with the ingredients. No UI nudge
+    -- here: this fires during combat and looting, when the backpack is not open.
+    if ready and kit < 1 then
+        kitWatch.busy = true
+        grantKit()
+        log("craft: kit to hand (vodka and bandage available)")
+        kitSettle(cm, pawn)
+    elseif not ready and kit >= 1 then
+        kitWatch.busy = true
+        fireNode("MolotovCraft_TakeKit")
+        log(string.format("craft: kit stowed (vodka=%s bandage=%s)",
+            tostring(vodka), tostring(bandage)))
+        kitSettle(cm, pawn)
+    end
+end
+
+LoopAsync(250, function()
+    ExecuteInGameThread(function() pcall(kitPoll) end)
+    return false
+end)
+
+-- F7 fires the chain directly (dev fallback if the kit watcher misses a use).
+RegisterKeyBind(Key.F7, function()
+    craftFire("hotkey", "MolotovCraft_Entry")
+end)
+
+-- F10: dev only — restock vodka for craft testing. The kit arrives on its own.
+-- (F11 is the game's window toggle, F8 quickload, F5 quicksave.)
+RegisterKeyBind(Key.F10, function()
+    ExecuteInGameThread(function()
+        local rk = liveInstance("CustomConsoleManagerRK")
+        if not rk then return end
+        pcall(function() rk:XCreateItemInInventoryByID("Vodka", 0, 5, 1.0) end)
+        log("craft: +5 vodka")
+        nudgeBurst(6, 250)
+    end)
+end)
 
 -- F9: object dump without the CTRL+O GUI (no PDA conflict, no focus juggling)
 RegisterKeyBind(Key.F9, function()

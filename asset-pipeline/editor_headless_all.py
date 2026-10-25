@@ -16,6 +16,7 @@ STEPS = (
     "editor_fix_phys.py",
     "editor_import_sm.py",
     "editor_fix_sm.py",
+    "editor_import_icon.py",
 )
 
 # commandlets skip the full asset registry scan — plugin content is invisible
