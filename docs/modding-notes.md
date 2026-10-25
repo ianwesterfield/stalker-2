@@ -39,9 +39,9 @@ this is the _how_ and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS
   `LaunchOnQuestStart` chain — hosting on `Bossfight_EquipTEST` dumped its whole dev loadout on
   every craft. Host on a vanilla quest with **zero nodes** (only 13 exist;
   `AnomalyTestMapSpawnOnStart` is the one in use) so there is nothing to cascade.
-- **New quests never register** — only new *nodes* do. Don't ship a `QuestPrototypes` file.
+- **New quests never register** — only new _nodes_ do. Don't ship a `QuestPrototypes` file.
 - Node fields are `ItemSID` / `ItemsCount`. The names `ItemPrototypeSID` / `ItemsCount` appear
-  only *inside* `Conditions`, where values are wrapped as
+  only _inside_ `Conditions`, where values are wrapped as
   `struct.begin VariableType=... VariableValue=... struct.end`.
 - Nodes chain through `Launchers[N].Connections[N].SID` — these are **incoming** links (each
   node declares what launches it); `If` branches are picked by `Name = True` / `Name = False`.

@@ -1156,11 +1156,11 @@ end
 local HOLD_BURN_HP = 0.5         -- per tick
 local HOLD_BURN_PERIOD = 1500    -- ms between ticks (~0.33 HP/s)
 local HOLD_BURN_FLOOR = 8.0      -- stop singeing below this HP
-local holdBurnN = 0
+local holdBurn = { n = 0, probed = false, lastHp = nil, mode = "damage" }
 
 LoopAsync(HOLD_BURN_PERIOD, function()
     if not fp.rag then
-        holdBurnN = 0
+        holdBurn.n, holdBurn.probed, holdBurn.lastHp = 0, false, nil
         return false
     end
     ExecuteInGameThread(function()
@@ -1170,16 +1170,45 @@ LoopAsync(HOLD_BURN_PERIOD, function()
             local rk = liveInstance("CustomConsoleManagerRK")
             local pawn
             pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+            -- this never fired once in testing and every exit here is silent,
+            -- so say which piece is missing
+            if not holdBurn.probed then
+                holdBurn.probed = true
+                log(string.format("hold-burn: probe cm=%s rk=%s pawn=%s",
+                    tostring(cm ~= nil), tostring(rk ~= nil), tostring(pawn ~= nil)))
+            end
             if not (cm and cm:IsValid() and rk and pawn and pawn:IsValid()) then return end
             local hp = cm:ObjGetHP(pawn)
-            if type(hp) == "number" and hp <= HOLD_BURN_FLOOR then return end
             local uid = cm:GetGUID(pawn)
-            if type(uid) ~= "number" or uid == 0 then return end
-            rk:XDealDamage(uid, HOLD_BURN_HP, 0.0, 0.0, 0.0, 0.0, 1, "")
-            holdBurnN = holdBurnN + 1
-            if holdBurnN == 1 or holdBurnN % 20 == 0 then
-                log(string.format("hold-burn: tick %d (hp %s)", holdBurnN,
-                    type(hp) == "number" and string.format("%.1f", hp) or "?"))
+            if holdBurn.n == 0 then
+                log(string.format("hold-burn: hp=%s uid=%s", tostring(hp), tostring(uid)))
+            end
+            if type(hp) == "number" and hp <= HOLD_BURN_FLOOR then return end
+
+            -- XDealDamage is proven on NPC UIDs but unproven on the player's;
+            -- if HP refuses to move, switch to the effect system instead
+            if holdBurn.mode == "damage" and holdBurn.n >= 2
+                and type(hp) == "number" and type(holdBurn.lastHp) == "number"
+                and hp >= holdBurn.lastHp then
+                holdBurn.mode = "effect"
+                log("hold-burn: XDealDamage did not move player HP -> MolotovHandSinge")
+            end
+            holdBurn.lastHp = hp
+
+            if holdBurn.mode == "damage" and type(uid) == "number" and uid ~= 0 then
+                rk:XDealDamage(uid, HOLD_BURN_HP, 0.0, 0.0, 0.0, 0.0, 1, "")
+            else
+                if holdBurn.mode == "damage" then
+                    holdBurn.mode = "effect"
+                    log("hold-burn: player UID unreadable -> MolotovHandSinge")
+                end
+                pcall(function() rk:XApplyEffectOnPlayer("MolotovHandSinge") end)
+            end
+            holdBurn.n = holdBurn.n + 1
+            if holdBurn.n == 1 or holdBurn.n % 10 == 0 then
+                log(string.format("hold-burn: tick %d (hp %s, %s)", holdBurn.n,
+                    type(hp) == "number" and string.format("%.1f", hp) or "?",
+                    holdBurn.mode))
             end
         end)
     end)
