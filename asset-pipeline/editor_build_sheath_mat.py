@@ -181,7 +181,10 @@ def build_fire_mat(name):
     pw = node(unreal.MaterialExpressionPower, -300, 280)
     wire(lum, "", pw, "Base")
     wire(opow, "", pw, "Exp")
-    oboost = scalar_param("OpacityBoost", 2.5, -300, 420)
+    # 0.0 = card flames fully invisible: Niagara NS_Character_Fire is the flame
+    # visual now; the stacked translucent cards read as black silhouettes (video-
+    # confirmed) — geometry/slots stay so flight-look MID code keeps working
+    oboost = scalar_param("OpacityBoost", 0.0, -300, 420)
     op_raw = node(unreal.MaterialExpressionMultiply, -160, 320)
     wire(pw, "", op_raw, "A")
     wire(oboost, "", op_raw, "B")
