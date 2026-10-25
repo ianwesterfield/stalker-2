@@ -3,7 +3,7 @@ Using bundled DotNet SDK version: 8.0.300
 Starting AutomationTool...
 Parsing command line: GSCCookModNewContent -Project="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject" -PluginPath="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Mods\MolotovBottle\MolotovBottle.uplugin" -TargetPlatform=Win64 -CustomConfig=ModCookNewContent -nocompile -nocompileuat -unrealexe="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Binaries\Win64\Stalker2ModEditor-Win64-Shipping-Cmd.exe"
 Initializing script modules...
-Total script module initialization time: 0.12 s.
+Total script module initialization time: 0.02 s.
 Using C:\Program Files\Microsoft SQL Server Management Studio 22\Release\MSBuild\Current\Bin\MSBuild.exe
 Executing commands...
 ---
@@ -13,8 +13,8 @@ C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Plugins\OnlineSubsystemGOG\
 C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Plugins\OnlineSubsystemGOG\OnlineSubsystemGOG.uplugin: warning: Unknown platform PS4 while parsing allow list for module descriptor OnlineSubsystemGOG
 ********** COOK COMMAND STARTED **********
 Running UnrealEditor Cook for project C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject
-Commandlet log file is C:\Program Files\Epic Games\STALKER2ZoneKit\Engine\Programs\AutomationTool\Saved\Cook-2026.10.24-19.04.58.txt
-Running: C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Binaries\Win64\Stalker2ModEditor-Win64-Shipping-Cmd.exe "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject" -run=Cook -CookDir="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Mods\MolotovBottle\MolotovBottle.uplugin" -TargetPlatform=Windows  -ddc=ModEditorInstalledDerivedDataBackendGraph -unversioned -outputdir="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows" -IgnoreMissingReferences -NoSaveDevAR -modcooknewcontent -nowrite -CookAgainstFixedBase -CustomConfig=ModCookNewContent -fileopenlog -manifests -dlcname=MolotovBottle -basedonreleaseversion=Latest -abslog="C:\Program Files\Epic Games\STALKER2ZoneKit\Engine\Programs\AutomationTool\Saved\Cook-2026.10.24-19.04.58.txt" -stdout -CrashForUAT -unattended -NoLogTimes
+Commandlet log file is C:\Program Files\Epic Games\STALKER2ZoneKit\Engine\Programs\AutomationTool\Saved\Cook-2026.10.24-22.36.08.txt
+Running: C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Binaries\Win64\Stalker2ModEditor-Win64-Shipping-Cmd.exe "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject" -run=Cook -CookDir="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Mods\MolotovBottle\MolotovBottle.uplugin" -TargetPlatform=Windows  -ddc=ModEditorInstalledDerivedDataBackendGraph -unversioned -outputdir="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows" -IgnoreMissingReferences -NoSaveDevAR -modcooknewcontent -nowrite -CookAgainstFixedBase -CustomConfig=ModCookNewContent -fileopenlog -manifests -dlcname=MolotovBottle -basedonreleaseversion=Latest -abslog="C:\Program Files\Epic Games\STALKER2ZoneKit\Engine\Programs\AutomationTool\Saved\Cook-2026.10.24-22.36.08.txt" -stdout -CrashForUAT -unattended -NoLogTimes
 LogConsoleManager: Warning: Console object named 'ai.Satisfier.ShowProcessCorpseDebug' already exists but is being registered again, but we weren't expected it to be! (FConsoleManager::AddConsoleObject)
 LogConsoleManager: Warning: Console object named 'ai.Satisfier.ShowProcessCorpseDebug' already exists but is being registered again, but we weren't expected it to be! (FConsoleManager::AddConsoleObject)
 LogParserManager: Warning: No config paths are active, using default parser path '../../../Stalker2/Content/GameLite/GameData/'
@@ -32,19 +32,15 @@ LogPakFile: Display: Mounted Pak file '../../Content/Paks/Stalker2-WindowsModEdi
 LogPakFile: Display: Found Pak file ../../Content/Paks/FullEditor-WindowsModEditor.pak attempting to mount.
 LogPakFile: Display: Mounting pak file ../../Content/Paks/FullEditor-WindowsModEditor.pak.
 LogPakFile: Display: Mounted Pak file '../../Content/Paks/FullEditor-WindowsModEditor.pak', mount point: '../../../'
-LogConfig: Display: Loading Windows ini files took 0.04 seconds
-LogConfig: Display: Loading VulkanPC ini files took 0.05 seconds
+LogConfig: Display: Loading VulkanPC ini files took 0.04 seconds
+LogConfig: Display: Loading Windows ini files took 0.06 seconds
 LogPlatformProviderController: Warning: Starting with PlatformProvider=Null
-LogAssetRegistry: Display: Asset registry cache read as 327.7 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_0.bin
 LogObj: Warning: Deprecated ini setting [/Script/Engine.GarbageCollectionSettings] gc.PendingKillEnabled=true found. Please rename it to gc.GarbageEliminationEnabled
 LogStreaming: Display: AsyncLoading2 - Created: Event Driven Loader: false, Async Loading Thread: false, Async Post Load: false
 LogStreaming: Display: AsyncLoading2 - Initialized
-LogAssetRegistry: Display: Asset registry cache read as 331.8 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_1.bin
 LogConsoleManager: Warning: Setting the console variable 'r.DistanceFieldAO' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByProjectSetting'. Value remains '0'
 LogConsoleManager: Warning: Setting the console variable 'r.Lumen.ScreenProbeGather.ShortRangeAO' with 'SetByScalability' was ignored as it is lower priority than the previous 'SetByProjectSetting'. Value remains '0'
 LogHAL: Display: Platform has ~ 64 GB [68401991680 / 68719476736 / 64], which maps to Largest [LargestMinGB=32, LargerMinGB=12, DefaultMinGB=8, SmallerMinGB=6, SmallestMinGB=0)
-LogAssetRegistry: Display: Asset registry cache read as 333.8 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_2.bin
-LogAssetRegistry: Display: Asset registry cache read as 342.6 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_3.bin
 LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatIntelISPCTexComp
 LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatDXT
 LogTextureFormatManager: Display: Loaded Base TextureFormat: TextureFormatUncompressed
@@ -58,18 +54,22 @@ LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsServer'
 LogTargetPlatformManager: Display: Loaded TargetPlatform 'WindowsClient'
 LogTargetPlatformManager: Display: Building Assets For Windows
 LogAudioDebug: Display: Lib vorbis DLL was dynamically loaded.
+LogAssetRegistry: Display: Asset registry cache read as 333.8 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_2.bin
+LogAssetRegistry: Display: Asset registry cache read as 331.8 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_1.bin
+LogAssetRegistry: Display: Asset registry cache read as 327.7 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_0.bin
+LogAssetRegistry: Display: Asset registry cache read as 342.6 MiB from C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_3.bin
 LogDerivedDataCache: Display: Memory: Max Cache Size: -1 MB
 LogDerivedDataCache: Display: ../../DerivedDataCache/Compressed.ddp: Opened pak cache for reading. (132216 MiB)
 LogDerivedDataCache: Warning: ZenLocal: Using ServerID=Local which was not found in [StorageServers]
 LogDerivedDataCache: Warning: ZenLocal: Missing required parameter 'Namespace', falling back to 'Stalker2'
-LogZenServiceInstance: Display: Launching executable 'C:/Users/ian/AppData/Local/UnrealEngine/Common/Zen/Install/zenserver.exe', working dir 'C:/Users/ian/AppData/Local/UnrealEngine/Common/Zen/Install', data dir 'C:/Program Files/Epic Games/STALKER2ZoneKit/Stalker2/Zen/Data', args '--port 8558 --data-dir "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Zen\Data" --http asio --gc-cache-duration-seconds 1209600 --gc-interval-seconds 21600 --gc-low-diskspace-threshold 2147483648 --quiet --http-forceloopback --owner-pid 62188 --child-id Zen_62188_Startup'
+LogZenServiceInstance: Display: Launching executable 'C:/Users/ian/AppData/Local/UnrealEngine/Common/Zen/Install/zenserver.exe', working dir 'C:/Users/ian/AppData/Local/UnrealEngine/Common/Zen/Install', data dir 'C:/Program Files/Epic Games/STALKER2ZoneKit/Stalker2/Zen/Data', args '--port 8558 --data-dir "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Zen\Data" --http asio --gc-cache-duration-seconds 1209600 --gc-interval-seconds 21600 --gc-low-diskspace-threshold 2147483648 --quiet --http-forceloopback --owner-pid 31120 --child-id Zen_31120_Startup'
 LogZenServiceInstance: Display: Unreal Zen Storage Server HTTP service at [::1]:8558 status: OK!.
 LogDerivedDataCache: Display: ZenLocal: Using ZenServer HTTP service at http://[::1]:8558/ with namespace Stalker2 status: OK!.
 LogShaderCompilers: Display: Using Local Shader Compiler with 29 workers.
 LogShaderCompilers: Display: Compiling shader autogen file: C:/Users/ian/AppData/Local/Stalker2/Intermediate/ShaderAutogen/PCD3D_SM6/AutogenShaderHeaders.ush
 LogShaderCompilers: Display: Autogen file is unchanged, skipping write.
-LogAssetRegistry: Display: AssetDataGatherer spent 0.063s loading caches C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_*.bin.
 LogEditorDomain: Display: EditorDomain is Disabled
+LogAssetRegistry: Display: AssetDataGatherer spent 0.062s loading caches C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_*.bin.
 LogStreaming: Display: FlushAsyncLoading(1): 1 QueuedPackages, 0 AsyncPackages
 LogCollisionProfile: Warning: Profile (VortexAnomalyPreset) - Custom Channel Name = 'Unused_1' hasn't been found
 Warning: While importing text for property 'Group' in 'TextureLODGroup':
@@ -432,7 +432,7 @@ LogAudioCaptureCore: Display: No Audio Capture implementations found. Audio inpu
 LogVirtualization: Display: VirtualizationSystem name found in ini file: None
 LogVirtualization: Display: FNullVirtualizationSystem mounted, virtualization will be disabled
 LogWorldPartition: Display: FWorldPartitionClassDescRegistry::Initialize started...
-LogWorldPartition: Display: FWorldPartitionClassDescRegistry::Initialize took 2.570 ms
+LogWorldPartition: Display: FWorldPartitionClassDescRegistry::Initialize took 2.987 ms
 LogWwiseSoundEngine: Display: Loading Wwise SoundEngine 2024.1.10 (Integration 2024.1)
 LogWwiseResourceCooker: Display: FWwiseResourceCookerImpl::SetWwiseStagePath: Updating path to "_STALKER2/Audio/WwiseAudio"
 LogWwiseProjectDatabase: Display: FWwiseProjectDatabase::SetGeneratedSoundBanksPath: Updating path to "C:/Program Files/Epic Games/STALKER2ZoneKit/Stalker2/S2_WwiseProject/GeneratedSoundBanks/"
@@ -576,7 +576,7 @@ LogConfigFileCache: Display: Total stats after refresh:
 LogParserManager: Display: ReloadingPrototypes
 LogParserManager: Display: Loading parent ParserNodes for: BaseGame, ../../Content/GameLite/GameData/
 LogParserNode: Warning: File '../../Content/GameLite/GameData/ArtifactKlondikePrototypes.cfg' does not exist. Failed to append ParserNode from file
-LogInit: Display: Loading prototypes took 10.0 seconds.
+LogInit: Display: Loading prototypes took 10.3 seconds.
 LogTemp: Warning: In function FSpawnActorPrototypes.CreateSpawnActorPrototype on line 399: No placeholder type specified for empty placeholder prototype
 LogTemp: Warning: In function FPostEffectProcessorPrototypes.Create on line 86: No type specified for Empty PostEffectProcessorPrototype
 LogTemp: Warning: In function FCameraShakePrototypes.Create on line 75: No type specified for Empty CameraShakePrototype
@@ -763,34 +763,34 @@ LogNavDataLayerCombinations: Display: Initializing UNavDataLayerCombinationEdito
 LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.PointLight_UAID_00D861D9738DE59D01_2143482300. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
 	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/7/J/E/EC1FTM5Q6IT2R5SI6BBXO6
 	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/7/G/J/EC1FTM5Q6IT2R5SI6BBXO6
+LogModTextToolManager: Display: Initializing Mod TextTool Manager for currently cooked mod 'MolotovBottle'
+LogModTextToolManager: Display: Selecting mod 'MolotovBottle'
+LogModAssetCache: Display: Path '/MolotovBottle' contains no ModTextToolAsset assets, assets filtered successfully: 1
+LogModKitWwise: Display: Initializing Wwise [base] content
 LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
-	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_REMOTE_582
-	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
-LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
-	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_REMOTE_1087
-	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
-LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
-	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_LOCAL_582
-	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
-LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
-	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_LOCAL_1087
-	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
-LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
-	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_BASE_582
-	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
-LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
-	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_BASE_1087
+	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_BACKUP_1087
 	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
 LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
 	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_BACKUP_582
 	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
 LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
-	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_BACKUP_1087
+	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_BASE_1087
 	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
-LogModTextToolManager: Display: Initializing Mod TextTool Manager for currently cooked mod 'MolotovBottle'
-LogModTextToolManager: Display: Selecting mod 'MolotovBottle'
-LogModAssetCache: Display: Path '/MolotovBottle' contains no ModTextToolAsset assets, assets filtered successfully: 1
-LogModKitWwise: Display: Initializing Wwise [base] content
+LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
+	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_BASE_582
+	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
+LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
+	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_LOCAL_1087
+	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
+LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
+	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_LOCAL_582
+	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
+LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
+	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_REMOTE_1087
+	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
+LogAssetRegistry: Warning: Invalid duplicate copies of ExternalActor /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP:PersistentLevel.WorldPartitionMiniMap_UAID_00FFC397D736F4DA00_1453011975. Resolve by deleting the package that is invalid. Chosing alphabetically for this process.
+	Discarding: /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX_REMOTE_582
+	Keeping:    /Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/1/D/Z/8EKD34CG1NQ54NS5NUUWWX
 LogModKitWwise: Display: Wwise [base] content initialization is finished
 LogConfig: Warning: FConfigCacheIni::LoadFile failed loading file as it was 0 size.  Filename was:  C:/Users/ian/AppData/Local/Stalker2/Saved/Config/WindowsEditor/GSCReXFrameGeneration.ini
 LogConfig: Warning: FConfigCacheIni::LoadFile failed loading file as it was 0 size.  Filename was:  C:/Users/ian/AppData/Local/Stalker2/Saved/Config/WindowsEditor/GSCReXLowLatency.ini
@@ -813,29 +813,28 @@ LogZenStore: Display: Zen oplog 'Stalker2.f98621d5/EditorDomain' already exists
 LogCook: Display: Waiting for Asset Registry
 LogAssetRegistry: Display: Asset registry cache written as 1335.9 MiB to C:/Users/ian/AppData/Local/Stalker2/Intermediate/CachedAssetRegistry_*.bin
 LogCook: Display: FULL COOK: Neither -iterative nor -cookincremental were specified. Deleting previously cooked packages for platform Windows and recooking all packages discovered in the current cook.
-LogCook: Display: Sandbox cleanup took 0.050 seconds for platforms Windows
+LogCook: Display: Sandbox cleanup took 0.041 seconds for platforms Windows
 LogAssetManager: Display: ModifyDLCCook: Scanning Plugin Directory MolotovBottle for assets, and adding them to the cook list
 LogGSCAssetManager: Warning: Adding 1 assets from AssetsToRecookWithDLC to 'PackagesToCook'
 LogGSCAssetManager: Display: Added '/Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP'
 LogGSCAssetManager: Display: -AssetsToNeverCookWithDLCList not provided on cmdline; nothing to add to 'PackagesToNeverCook'
 LogCook: Warning: Unable to generate long package name, /S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_silencer_upgrade. Input '/S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_silencer_upgrade' is not a child of an existing mount point.
 LogCook: Warning: Unable to generate long package name, /S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_grip_upgrade. Input '/S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_grip_upgrade' is not a child of an existing mount point.
+LogCook: Warning: Unable to generate long package name, /S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_colimscope_upgrade. Input '/S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_colimscope_upgrade' is not a child of an existing mount point.
 LogCook: Warning: Unable to generate long package name, /S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_silencer. Input '/S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_silencer' is not a child of an existing mount point.
 LogCook: Warning: Unable to generate long package name, /S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_colimscope. Input '/S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_colimscope' is not a child of an existing mount point.
 LogCook: Warning: Unable to generate long package name, /S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_grip. Input '/S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_grip' is not a child of an existing mount point.
-LogCook: Warning: Unable to generate long package name, /S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_colimscope_upgrade. Input '/S2_DLC1/UI/UIRemaster/UITextures/Inventory/WeaponAndAttachments/Arev/T_inv_w_arev_warszaw_colimscope_upgrade' is not a child of an existing mount point.
 LogCook: Display: Discovering localized assets for cultures: ar, cs, de, en, es, es-419, fr, it, ja, ko, pl, pt, pt-BR, ru, sr, sr-Latn, sr-Latn-RS, sr-RS, tr, uk, zh, zh-Hans, zh-Hant
 LogCook: Display: Found 0 localized assets
 LogGSCAssetManager: Warning: Adding 1 assets from AssetsToRecookWithDLC to 'PackagesToClearResults'
 LogGSCAssetManager: Display: Added '/Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP'
 LogCook: Display: Cleared the cook results of 1 packages because ClearCookResultsForPackages requested them to be recooked.
 LogCook: Display: Cooked packages -1 Packages Remain 20982 Total 20981
-LogCook: Display: Cook Diagnostics: OpenFileHandles=0, VirtualMemory=14341MiB, VirtualMemoryAvailable=38658MiB
+LogCook: Display: Cook Diagnostics: OpenFileHandles=0, VirtualMemory=14077MiB, VirtualMemoryAvailable=37663MiB
 LogCook: Warning: Warning MemoryMaxUsed condition is larger than total memory (163840MiB >= 65233MiB).  System does not have enough memory to cook this project.
 LogTextureFormatOodle: Display: Oodle Texture loading DLL: oo2tex_win64_2.9.8.dll
 LogModKitWwise: Display: No changed sound banks, nothing to cook
-LogCook: Display: Cooked packages 0 Packages Remain 12 Total 12
-LogCook: Display: Cook Diagnostics: OpenFileHandles=0, VirtualMemory=15120MiB, VirtualMemoryAvailable=37355MiB
+LogCook: Display: Cooked packages 2 Packages Remain 10 Total 12
 LogStreaming: Display: ImportPackages: SkipPackage: /Game/_Stalker_2/maps/WorldMap/M_WorldMap_LDScheme (0xCFC96B8BC9C5B31) /Game/_Stalker_2/maps/WorldMap/M_WorldMap_LDScheme (0xCFC96B8BC9C5B31) - Skipping non mounted imported package /Game/_Stalker_2/Materials/NewShaders/Functions/pbr_functions/MF_PhysMatIF (0x438186BB20BBFF6)
 LogCook: Display: Map Package: /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP, Category: AssetManagerModifyDLCCook, Investigator Name None
 LogWorldPartition: Display: [Cook] Gathering packages to cook from generators for owner object World /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP.
@@ -844,7 +843,7 @@ LogWorldPartition: Warning: Unknown actor base class `/Game/_Stalker_2/vehicle/t
 LogWorldPartition: Warning: Duplicate actor descriptor in package `/Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/7/W/J/8IDK1NSPMD6C0CFZM64RJ2`: Actor: 'InstancedFoliageActor_25600_13_20_0' -> Existing actor 'InstancedFoliageActor_0'
 LogWorldPartition: Warning: Unknown actor base class `/Game/_Stalker_2/vehicle/land/blueprints/BP_veh_mine_cart.BP_veh_mine_cart_C`: Actor: 'BP_veh_mine_cart8' (guid '34CC940843471A044ED4BD90F306CB64') from package '/Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/9/P/A/BKM59B9CKH1WUKURI1YZF5'
 LogWorldPartition: Warning: Unknown actor base class `/Game/_Stalker_2/vehicle/trains/blueprints/BP_tra_railway_carriage_covered_02.BP_tra_railway_carriage_covered_02_C`: Actor: 'BP_tra_railway_carriage_covered_02_C_0' (guid 'D1786BCF4D8E0B40DD1EAF8970B6A0DF') from package '/Game/__ExternalActors__/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP/N/S/W/A95PV709VY2LDBP278N1BY'
-LogWorldPartition: Display: WorldPartition initialize took 11.1 sec
+LogWorldPartition: Display: WorldPartition initialize took 11.0 sec
 LogWorldPartition: Display: Skipping GatherPackagesToCook because DLCCookCommandlet is running
 LogWorldPartition: Display: [Cook] Gathered 0 packages to generate from 1 Generators.
 LogWorldPartition: Display: [Cook] Sending 0 packages to be generated.
@@ -853,15 +852,57 @@ LogCook: Display: Splitting Package /Game/_Stalker_2/maps/_Stalker2_WorldMap/Wor
 LogWorldPartition: Display: [Cook][PopulateGeneratorPackage] Processing 0 packages
 LogWorldPartition: Display: [Cook][PopulateGeneratorPackage] Gathered 0 modified packages
 LogModKitMaterialValidation: Warning: Compiling 'None': Do not use this node: 'CurrentFrameFOV'! It will not work on non-Windows platforms
-LogMaterial: Display: Missing cached shadermap for M_SheathFlame in PCD3D_SM6, Default, SM6, Game (DDC key hash: 1441886d82eb7f74972550d662c919cc47635e49), compiling.
-LogTemp: Display: Kicking off shader compilation for M_SheathFlame, GameThreadShaderMap 0x0000059280EA4100
-LogMaterial: Display: Missing cached shadermap for M_RagFlame in PCD3D_SM6, Default, SM6, Game (DDC key hash: a9479ba14055ff8484873699ffd4e27779d15821), compiling.
-LogTemp: Display: Kicking off shader compilation for M_RagFlame, GameThreadShaderMap 0x0000059280EA8700
+LogModKitMaterialValidation: Warning: Compiling 'None': Do not use this node: 'PrevFrameFOV'! It will not work on non-Windows platforms
+LogMaterial: Display: Missing cached shadermap for M_SheathFlame in PCD3D_SM6, Default, SM6, Game (DDC key hash: bc699dfbedf0c1efbaa848261281eb5b16be91e5), compiling.
+LogTemp: Display: Kicking off shader compilation for M_SheathFlame, GameThreadShaderMap 0x00000811EFC16400
+LogMaterial: Display: Missing cached shadermap for M_RagFlame in PCD3D_SM6, Default, SM6, Game (DDC key hash: 7826500487a9db03cb33182790bf89248cda1351), compiling.
+LogTemp: Display: Kicking off shader compilation for M_RagFlame, GameThreadShaderMap 0x00000811EFC11180
 LogCook: Display: Cooked packages 10 Packages Remain 2 Total 12
+LogCook: Display: Cook Diagnostics: OpenFileHandles=0, VirtualMemory=16337MiB, VirtualMemoryAvailable=35133MiB
 LogWorldPartition: Display: [Cook] Debug(TearDown): OwnerObject=World /Game/_Stalker_2/maps/_Stalker2_WorldMap/WorldMap_WP.WorldMap_WP bForceInitializedWorld=1 bInitializedPhysicsSceneForSave=1
 LogCook: Display: Cooked packages 12 Packages Remain 0 Total 12
-LogCook: Display: Cook Diagnostics: OpenFileHandles=0, VirtualMemory=16353MiB, VirtualMemoryAvailable=36641MiB
+LogCook: Display: Cook Diagnostics: OpenFileHandles=0, VirtualMemory=16338MiB, VirtualMemoryAvailable=34655MiB
 LogCook: Display: Finishing up...
+LogShaderCompilers: Display: ================================================
+LogShaderCompilers: Display: === FShaderJobCache stats ===
+LogShaderCompilers: Display: Total job queries 16, among them cache hits 0 (0.00%), DDC hits 0 (0.00%), Duplicates 10 (62.50%)
+LogShaderCompilers: Display: Tracking 6 distinct input hashes that result in 5 distinct outputs (83.33%)
+LogShaderCompilers: Display: RAM used: 60.13 KiB of 3.20 GiB budget. Usage: 0.00%
+LogShaderCompilers: Display: === Shader Compilation stats ===
+LogShaderCompilers: Display: Shaders Compiled: 6
+LogShaderCompilers: Display: Jobs assigned 6, completed 6 (100%)
+LogShaderCompilers: Display: Time job spent in pending queue: average 0.08 s, longest 0.08 s
+LogShaderCompilers: Display: Job execution time: average 1.17 s, max 1.20 s
+LogShaderCompilers: Display: Job life time (pending + execution): average 1.25 s, max 1.28
+LogShaderCompilers: Display: Shader code size: average 9.826 KiB, min 6.195 KiB, max 15.098 KiB
+LogShaderCompilers: Display: Time at least one job was in flight (either pending or executed): 1.28 s
+LogShaderCompilers: Display: Mutex wait stall in FShaderJobCache::SubmitJobs:  0.28%
+LogShaderCompilers: Display: Jobs were issued in 6 batches (only local compilation was used), average 1.00 jobs/batch
+LogShaderCompilers: Display: Average processing rate: 4.67 jobs/sec
+LogShaderCompilers: Display: Total thread time: 1.381 s
+LogShaderCompilers: Display: Total thread preprocess time: 0.201 s
+LogShaderCompilers: Display: Percentage time preprocessing: 14.52%
+LogShaderCompilers: Display: Effective parallelization: 1.08 (times faster than compiling all shaders on one thread). Compare with number of workers: 28
+LogShaderCompilers: Display: Top 5 most expensive shader types by average time:
+LogShaderCompilers: Display:                         TBasePassPSFNoLightMapPolicySkylight (compiled    1 times, average 0.30 sec, max 0.30 sec, min 0.30 sec)
+LogShaderCompilers: Display:                                 TBasePassPSFNoLightMapPolicy (compiled    1 times, average 0.29 sec, max 0.29 sec, min 0.29 sec)
+LogShaderCompilers: Display:                                                 FLumenCardPS (compiled    1 times, average 0.21 sec, max 0.21 sec, min 0.21 sec)
+LogShaderCompilers: Display:                                 TBasePassVSFNoLightMapPolicy (compiled    2 times, average 0.20 sec, max 0.20 sec, min 0.20 sec)
+LogShaderCompilers: Display:                                                 FLumenCardVS (compiled    1 times, average 0.17 sec, max 0.17 sec, min 0.17 sec)
+LogShaderCompilers: Display: Top 5 shader types by total compile time:
+LogShaderCompilers: Display:                                 TBasePassVSFNoLightMapPolicy - 29.54% of total time (compiled    2 times, average 0.20 sec, max 0.20 sec, min 0.20 sec)
+LogShaderCompilers: Display:                         TBasePassPSFNoLightMapPolicySkylight - 21.36% of total time (compiled    1 times, average 0.30 sec, max 0.30 sec, min 0.30 sec)
+LogShaderCompilers: Display:                                 TBasePassPSFNoLightMapPolicy - 21.34% of total time (compiled    1 times, average 0.29 sec, max 0.29 sec, min 0.29 sec)
+LogShaderCompilers: Display:                                                 FLumenCardPS - 15.46% of total time (compiled    1 times, average 0.21 sec, max 0.21 sec, min 0.21 sec)
+LogShaderCompilers: Display:                                                 FLumenCardVS - 12.30% of total time (compiled    1 times, average 0.17 sec, max 0.17 sec, min 0.17 sec)
+LogShaderCompilers: Display: === Material stats ===
+LogShaderCompilers: Display: Materials Cooked:        4
+LogShaderCompilers: Display: Materials Translated:    0
+LogShaderCompilers: Display: Material Total Translate Time: 0.00 s
+LogShaderCompilers: Display: Material Translation Only: 0.00 s (0%)
+LogShaderCompilers: Display: Material DDC Serialization Only: 0.00 s (0%)
+LogShaderCompilers: Display: Material Cache Hits: 0 (0%)
+LogShaderCompilers: Display: ================================================
 LogCook: Display: Could not load config file 'ConfigSystem.<Editor>.../../../Stalker2/Config/Tags/GameplayEventSystemTags.ini'. Changes to settings in this file will not be detected in iterative cooks.
 LogCook: Display: Could not load config file 'ConfigSystem.<Editor>.../../../Stalker2/Config/Tags/RazerChromaGameplayTags.ini'. Changes to settings in this file will not be detected in iterative cooks.
 LogCook: Display: Could not load config file 'LocalSingleIniFile.<Editor>.../../Config/UserGame.ini'. Changes to settings in this file will not be detected in iterative cooks.
@@ -881,60 +922,60 @@ LogShaderLibrary: Display: Maximum number of shaders in shadermap: 59
 LogShaderLibrary: Display: Number of shadermaps referencing top 10 most shared shaders:
 LogShaderLibrary: Display:     1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 LogShaderLibrary: Display: Unique shaders itemization (sorted by compressed size):
-LogShaderLibrary: Display: SF_Vertex: 38 shaders (55.07%), compressed size: 0.31 MB (8.41 KB avg per shader), uncompressed size: 0.41 MB (11.18 KB avg per shader)
+LogShaderLibrary: Display: SF_Vertex: 38 shaders (55.07%), compressed size: 0.31 MB (8.44 KB avg per shader), uncompressed size: 0.42 MB (11.23 KB avg per shader)
 LogShaderLibrary: Display: SF_Compute: 8 shaders (11.59%), compressed size: 0.15 MB (19.62 KB avg per shader), uncompressed size: 0.20 MB (25.09 KB avg per shader)
-LogShaderLibrary: Display: SF_Pixel: 17 shaders (24.64%), compressed size: 0.06 MB (3.88 KB avg per shader), uncompressed size: 0.08 MB (4.93 KB avg per shader)
+LogShaderLibrary: Display: SF_Pixel: 17 shaders (24.64%), compressed size: 0.07 MB (4.02 KB avg per shader), uncompressed size: 0.09 MB (5.13 KB avg per shader)
 LogShaderLibrary: Display: SF_Mesh: 6 shaders (8.70%), compressed size: 0.06 MB (10.06 KB avg per shader), uncompressed size: 0.07 MB (12.55 KB avg per shader)
 LogShaderLibrary: Display: Textual dump saved to 'C:/Users/ian/AppData/Local/Stalker2/Saved/Shaders/PCD3D_SM6-PCD3D_SM6/ShaderDebug-MolotovBottle-PCD3D_SM6-PCD3D_SM6/Dump.txt'
 LogShaderLibrary: Display: =================
 LogCook: Display: Dependent plugin "GameplayInsights" referenced by "Pose Search" wasn't found in enabled plugins list when creating cook metadata file... skipping
 LogCook: Display: Finalize package store(s)...
-LogCook: Display: Cook by the book total time in tick 56.544978s total time 86.276009
-LogCook: Display: Peak Used virtual 17835 MiB Peak Used physical 16220 MiB
+LogCook: Display: Cook by the book total time in tick 37.616456s total time 65.360680
+LogCook: Display: Peak Used virtual 17780 MiB Peak Used physical 16307 MiB
 LogCook: Display: Packages Cooked: 12, Packages Iteratively Skipped: 0, Packages Skipped by Platform: 0, Total Packages: 12
 LogCookStats: Display: Hierarchy Timer Information:
 LogCookStats: Display:   Root: 0.000s (0)
-LogCookStats: Display:     CleanSandbox: 0.050s (1)
-LogCookStats: Display:     CollectFilesToCook: 0.040s (1)
-LogCookStats: Display:       CookModificationDelegate: 0.032s (1)
-LogCookStats: Display:     GenerateLongPackageName: 0.028s (1)
-LogCookStats: Display:     TickMainCookLoop: 56.545s (1)
-LogCookStats: Display:       PumpPollables: 0.003s (2)
-LogCookStats: Display:       PumpRequests: 2.045s (3)
-LogCookStats: Display:       UCookOnTheFlyServer::PumpLoads: 0.191s (2)
-LogCookStats: Display:         LoadPackageForCooking: 0.190s (13)
+LogCookStats: Display:     CleanSandbox: 0.041s (1)
+LogCookStats: Display:     CollectFilesToCook: 0.026s (1)
+LogCookStats: Display:       CookModificationDelegate: 0.019s (1)
+LogCookStats: Display:     GenerateLongPackageName: 0.025s (1)
+LogCookStats: Display:     TickMainCookLoop: 37.616s (1)
+LogCookStats: Display:       PumpPollables: 0.000s (2)
+LogCookStats: Display:       PumpRequests: 1.956s (3)
+LogCookStats: Display:       UCookOnTheFlyServer::PumpLoads: 0.179s (2)
+LogCookStats: Display:         LoadPackageForCooking: 0.179s (13)
 LogCookStats: Display:         ValidateSourcePackage: 0.000s (13)
 LogCookStats: Display:         PostLoadPackageFixup: 0.000s (1)
-LogCookStats: Display:       UCookOnTheFlyServer::PumpSaves: 54.206s (16)
-LogCookStats: Display:         SavingPackages: 54.206s (16)
-LogCookStats: Display:           PollPendingCookedPlatformDatas: 0.009s (41)
-LogCookStats: Display:           PrepareSave: 11.181s (34)
-LogCookStats: Display:           PrecachePlatformDataForNextPackage: 0.063s (12)
-LogCookStats: Display:             PrepareSave: 0.063s (19)
-LogCookStats: Display:           SaveCookedPackage: 42.951s (13)
-LogCookStats: Display:             GEditorSavePackage: 37.752s (13)
+LogCookStats: Display:       UCookOnTheFlyServer::PumpSaves: 34.177s (135)
+LogCookStats: Display:         SavingPackages: 34.177s (135)
+LogCookStats: Display:           PollPendingCookedPlatformDatas: 0.017s (281)
+LogCookStats: Display:           PrepareSave: 11.050s (274)
+LogCookStats: Display:           PrecachePlatformDataForNextPackage: 0.048s (12)
+LogCookStats: Display:             PrepareSave: 0.048s (19)
+LogCookStats: Display:           SaveCookedPackage: 23.059s (13)
+LogCookStats: Display:             GEditorSavePackage: 17.759s (13)
 LogCookStats: Display:               VerifyCanCookPackage: 0.008s (13)
 LogCookStats: Display:           ClearAllCachedCookedPlatformData: 0.000s (13)
-LogCookStats: Display:       WaitForAsync: 0.096s (6684)
-LogCookStats: Display:     CookByTheBookFinished: 23.245s (1)
+LogCookStats: Display:       WaitForAsync: 1.268s (134728)
+LogCookStats: Display:     CookByTheBookFinished: 22.411s (1)
 LogCookStats: Display:       SavingCurrentIniSettings: 0.032s (1)
 LogCookStats: Display:         ProcessingAccessedStrings: 0.007s (1)
 LogCookStats: Display:       ChunkGeneration: 0.012s (1)
-LogCookStats: Display:       CalculateReferencedSet: 1.086s (1)
-LogCookStats: Display:         RemovingOldManifestEntries: 0.960s (1)
+LogCookStats: Display:       CalculateReferencedSet: 1.088s (1)
+LogCookStats: Display:         RemovingOldManifestEntries: 0.959s (1)
 LogCookStats: Display:       FinishPopulateShaderLibrary: 0.001s (1)
 LogCookStats: Display:       GeneratorPreSave: 0.000s (1)
-LogCookStats: Display:       BuildChunkManifest: 0.434s (1)
-LogCookStats: Display:         PruneAssetData: 0.353s (1)
+LogCookStats: Display:       BuildChunkManifest: 0.428s (1)
+LogCookStats: Display:         PruneAssetData: 0.348s (1)
 LogCookStats: Display:         BuildSandboxPaths: 0.000s (1)
-LogCookStats: Display:         CalculateChunkIdsAndAssignToManifest: 0.001s (12)
+LogCookStats: Display:         CalculateChunkIdsAndAssignToManifest: 0.000s (12)
 LogCookStats: Display:           GetPackageChunkIds: 0.000s (12)
 LogCookStats: Display:         FixupPackageDependenciesForChunks: 0.006s (1)
-LogCookStats: Display:       SaveManifests: 0.010s (1)
-LogCookStats: Display:       SaveAssetRegistry: 20.394s (1)
-LogCookStats: Display:         SaveChunkAssetRegistries: 0.111s (1)
-LogCookStats: Display:       WriteCookerOpenOrder: 1.250s (1)
-LogCookStats: Display:       WriteCookMetadata: 0.000s (1)
+LogCookStats: Display:       SaveManifests: 0.009s (1)
+LogCookStats: Display:       SaveAssetRegistry: 19.611s (1)
+LogCookStats: Display:         SaveChunkAssetRegistries: 0.110s (1)
+LogCookStats: Display:       WriteCookerOpenOrder: 1.204s (1)
+LogCookStats: Display:       WriteCookMetadata: 0.001s (1)
 LogCookStats: Display:       WriteReferencedSet: 0.000s (1)
 LogCookStats: Display:       FinalizePackageStore: 0.000s (1)
 LogCookStats: Display: Misc Cook Stats
@@ -955,24 +996,24 @@ LogCookStats: Display:     NiagaraSystemWaitForCompilationCompleteTime=0.000000
 LogCookStats: Display: NiagaraShader.Misc
 LogCookStats: Display:     ShadersCompiled=0
 LogCookStats: Display: ShaderCompiler
-LogCookStats: Display:     BlockingTimeSec=0.000018
-LogCookStats: Display:     AsyncCompileTimeSec=0.000000
-LogCookStats: Display:     GlobalBeginCompileShaderTimeSec=0.001580
+LogCookStats: Display:     BlockingTimeSec=0.000027
+LogCookStats: Display:     AsyncCompileTimeSec=6.991005
+LogCookStats: Display:     GlobalBeginCompileShaderTimeSec=0.001707
 LogCookStats: Display:     GlobalBeginCompileShaderCalls=16
-LogCookStats: Display:     ProcessAsyncResultsTimeSec=0.002198
+LogCookStats: Display:     ProcessAsyncResultsTimeSec=0.001902
 LogCookStats: Display: GlobalShader.Misc
 LogCookStats: Display:     ShadersCompiled=0
 LogCookStats: Display: Material
-LogCookStats: Display:     FinishCacheShadersSec=0.007677
+LogCookStats: Display:     FinishCacheShadersSec=0.014247
 LogCookStats: Display: Package.Load
 LogCookStats: Display:     NumRequestedLoads=12
 LogCookStats: Display:     NumPackagesLoaded=261
 LogCookStats: Display:     NumInlineLoads=249
-LogCookStats: Display:     LoadPackageTimeSec=1.340464
+LogCookStats: Display:     LoadPackageTimeSec=1.738122
 LogCookStats: Display: Package.Save
 LogCookStats: Display:     NumPackagesIterativelySkipped=0
 LogCookStats: Display:     NumPackagesSaved=14
-LogCookStats: Display:     SavePackageTimeSec=37.744424
+LogCookStats: Display:     SavePackageTimeSec=17.751827
 LogCookStats: Display:     TagPackageExportsPresaveTimeSec=0.000000
 LogCookStats: Display:     TagPackageExportsTimeSec=0.000000
 LogCookStats: Display:     FullyLoadLoadersTimeSec=0.000000
@@ -982,7 +1023,7 @@ LogCookStats: Display:     TagPackageExportsGetObjectsWithMarks=0.000000
 LogCookStats: Display:     SerializeImportsTimeSec=0.000000
 LogCookStats: Display:     SortExportsSeekfreeInnerTimeSec=0.000000
 LogCookStats: Display:     SerializeExportsTimeSec=0.000000
-LogCookStats: Display:     SerializeBulkDataTimeSec=0.000044
+LogCookStats: Display:     SerializeBulkDataTimeSec=0.000043
 LogCookStats: Display:     AsyncWriteTimeSec=0.000000
 LogCookStats: Display:     MBWritten=0.000000
 LogCookStats: Display: CookOnTheFlyServer
@@ -1006,22 +1047,22 @@ LogCookStats: Display:     BitfieldWasteKB=0
 LogCookStats: Display:
 LogCookStats: Display: Cook Profile
 LogCookStats: Display: ============
-LogCookStats: Display:  0.CookWallTimeSec=134.537212
-LogCookStats: Display:  0. 0.StartupWallTimeSec=47.990736
-LogCookStats: Display:  0. 1.StartCookByTheBookTimeSec=6.751257
-LogCookStats: Display:  0. 1. 0.BlockOnAssetRegistryTimeSec=2.120686
-LogCookStats: Display:  0. 1. 1.GameCookModificationDelegateTimeSec=0.031769
+LogCookStats: Display:  0.CookWallTimeSec=106.019571
+LogCookStats: Display:  0. 0.StartupWallTimeSec=40.461665
+LogCookStats: Display:  0. 1.StartCookByTheBookTimeSec=5.525841
+LogCookStats: Display:  0. 1. 0.BlockOnAssetRegistryTimeSec=1.464880
+LogCookStats: Display:  0. 1. 1.GameCookModificationDelegateTimeSec=0.018869
 LogCookStats: Display:  0. 2.TickCookOnTheSideTimeSec=0.000000
-LogCookStats: Display:  0. 2. 0.TickCookOnTheSideLoadPackagesTimeSec=0.190319
-LogCookStats: Display:  0. 2. 1.TickCookOnTheSideSaveCookedPackageTimeSec=42.951130
+LogCookStats: Display:  0. 2. 0.TickCookOnTheSideLoadPackagesTimeSec=0.179160
+LogCookStats: Display:  0. 2. 1.TickCookOnTheSideSaveCookedPackageTimeSec=23.059384
 LogCookStats: Display:  0. 2. 1. 0.TickCookOnTheSideResolveRedirectorsTimeSec=0.000000
-LogCookStats: Display:  0. 2. 2.TickCookOnTheSidePrepareSaveTimeSec=11.244544
+LogCookStats: Display:  0. 2. 2.TickCookOnTheSidePrepareSaveTimeSec=11.098253
 LogCookStats: Display:  0. 3.TickLoopGCTimeSec=0.000000
 LogCookStats: Display:  0. 4.TickLoopRecompileShaderRequestsTimeSec=0.000000
-LogCookStats: Display:  0. 5.TickLoopShaderProcessAsyncResultsTimeSec=0.002199
-LogCookStats: Display:  0. 6.TickLoopProcessDeferredCommandsTimeSec=0.000317
+LogCookStats: Display:  0. 5.TickLoopShaderProcessAsyncResultsTimeSec=0.000006
+LogCookStats: Display:  0. 6.TickLoopProcessDeferredCommandsTimeSec=0.000246
 LogCookStats: Display:  0. 7.TickLoopTickCommandletStatsTimeSec=0.000000
-LogCookStats: Display:  0. 8.TickLoopFlushRenderingCommandsTimeSec=0.000143
+LogCookStats: Display:  0. 8.TickLoopFlushRenderingCommandsTimeSec=0.000208
 LogCookStats: Display:  0. 9.ShaderFlushTimeSec=0.000000
 LogCookStats: Display:  0. 10.ValidationTimeSec=0.000006
 LogCookStats: Display:  1.CookParameters=
@@ -1042,35 +1083,35 @@ LogCookStats: Display: HasLocalCache   =      true
 LogCookStats: Display: HasSharedCache  =     false
 LogCookStats: Display: HasCloudCache   =     false
 LogCookStats: Display: HasZenCache     =      true
-LogCookStats: Display: TotalGetHits    =       409
-LogCookStats: Display: TotalGetMisses  =         8
-LogCookStats: Display: TotalGets       =       417
-LogCookStats: Display: TotalGetHitPct  =  0.980815
-LogCookStats: Display: GetMissPct      =  0.019185
-LogCookStats: Display: TotalPutHits    =         8
+LogCookStats: Display: TotalGetHits    =       405
+LogCookStats: Display: TotalGetMisses  =        15
+LogCookStats: Display: TotalGets       =       420
+LogCookStats: Display: TotalGetHitPct  =  0.964286
+LogCookStats: Display: GetMissPct      =  0.035714
+LogCookStats: Display: TotalPutHits    =        15
 LogCookStats: Display: TotalPutMisses  =         0
-LogCookStats: Display: TotalPuts       =         8
+LogCookStats: Display: TotalPuts       =        15
 LogCookStats: Display: TotalPutHitPct  =  1.000000
 LogCookStats: Display: PutMissPct      =  0.000000
-LogCookStats: Display: LocalGetHits    =       265
-LogCookStats: Display: LocalGetMisses  =         8
-LogCookStats: Display: LocalGetTotal   =       273
-LogCookStats: Display: LocalGetHitPct  =  0.970696
+LogCookStats: Display: LocalGetHits    =       261
+LogCookStats: Display: LocalGetMisses  =        15
+LogCookStats: Display: LocalGetTotal   =       276
+LogCookStats: Display: LocalGetHitPct  =  0.945652
 LogCookStats: Display: SharedGetHits   =         0
 LogCookStats: Display: SharedGetTotal  =         0
 LogCookStats: Display: SharedGetHitPct =  0.000000
-LogCookStats: Display: ZenLocalGetHits =       265
-LogCookStats: Display: ZenLocalGetTotal=       273
-LogCookStats: Display: ZenLocalGetHitPct=  0.970696
+LogCookStats: Display: ZenLocalGetHits =       261
+LogCookStats: Display: ZenLocalGetTotal=       276
+LogCookStats: Display: ZenLocalGetHitPct=  0.945652
 LogCookStats: Display: ZenRemoteGetHits=         0
 LogCookStats: Display: ZenRemoteGetTotal=         0
 LogCookStats: Display: ZenRemoteGetHitPct=  0.000000
 LogCookStats: Display: CloudGetHits    =         0
 LogCookStats: Display: CloudGetTotal   =         0
 LogCookStats: Display: CloudGetHitPct  =  0.000000
-LogCookStats: Display: LocalLatency    =  0.139377
-LogCookStats: Display: LocalReadSpeed  = 62.802168
-LogCookStats: Display: LocalWriteSpeed = 18.275927
+LogCookStats: Display: LocalLatency    =  0.138262
+LogCookStats: Display: LocalReadSpeed  = 56.845127
+LogCookStats: Display: LocalWriteSpeed = 20.440442
 LogCookStats: Display: SharedLatency   =  0.000000
 LogCookStats: Display: SharedReadSpeed =  0.000000
 LogCookStats: Display: SharedWriteSpeed=  0.000000
@@ -1089,16 +1130,16 @@ LogCookStats: Display: DistanceField                                   0.00     
 LogCookStats: Display: StaticMesh                                      0.00                   0.01             0          0.68
 LogCookStats: Display: CardRepresentation                              0.00                   0.00             1          0.01
 LogCookStats: Display: NavCollision                                    0.00                   0.00             1          0.02
-LogCookStats: Display: BulkDataPayloadId                               0.00                   0.00             0          0.00
 LogCookStats: Display: AnimationSequence                               0.00                   0.00             0          0.08
+LogCookStats: Display: BulkDataPayloadId                               0.00                   0.00             0          0.00
 LogCookStats: Display: BodySetup                                       0.00                   0.00             0          0.31
-LogCookStats: Display: MaterialTranslation                             0.00                   0.00             1          0.01
+LogCookStats: Display: Shader                                          0.00                   0.00             6          0.00
+LogCookStats: Display: MaterialTranslation                             0.00                   0.00             2          0.02
 LogCookStats: Display: Texture                                         0.00                   0.00             0          0.30
-LogCookStats: Display: Shader                                          0.00                   0.00             0          0.04
 LogCookStats: Display: SubUV                                           0.00                   0.00             0          0.01
 LogCookStats: Display: SkeletalMesh                                    0.00                   0.00             0          0.55
 LogPackageBuildDependencyTracker: Display: Package Accesses (310 referencing packages with a total of 2224 unique accesses)
-LogConfigBuildDependencyTracker: Display: Config Accesses (53 referencing packages with a total of 1215 unique accesses). 3253 unique accesses that were not associated with a package.
+LogConfigBuildDependencyTracker: Display: Config Accesses (53 referencing packages with a total of 1215 unique accesses). 3261 unique accesses that were not associated with a package.
 LogCook: Display: Done!
 LogInit: Display:
 LogInit: Display: Warning/Error Summary (Unique only)
@@ -1155,10 +1196,10 @@ LogInit: Display: Warning: FByteProperty: In asset '/Script/Engine.Default__Bill
 LogInit: Display: Warning: FByteProperty: In asset '/Script/Engine.Default__BillboardComponent', there is an enum property of type 'TextureGroup' with an invalid value of 'TEXTUREGROUP_GSC_Decal_RSCH' - loaded
 LogInit: Display: NOTE: Only first 50 warnings displayed.
 LogInit: Display:
-LogInit: Display: Success - 0 error(s), 502 warning(s)
+LogInit: Display: Success - 0 error(s), 503 warning(s)
 LogInit: Display:
 
-Execution of commandlet took:  1m 28s (88.27 seconds)
+Execution of commandlet took:  1m 7s (67.09 seconds)
 LogTemp: Display: === All async loading is not allowed anymore ===
 LogCook: Warning: AsyncIoDelete found unexpected directory 'C:/Program Files/Epic Games/STALKER2ZoneKit/Stalker2/SavedMods/Cooked/MolotovBottle/Windows/NewContent/Windows/Stalker2' in its SharedTempRoot. This directory will block cleanup of the SharedTempRoot, please delete it manually.
 LogShaderCompilers: Display: Shaders left to compile 0
@@ -1173,8 +1214,8 @@ LogGameAnalyticsAnalytics: Display: FAnalyticsGameAnalytics ~FAnalyticsProviderG
 LogWwiseSoundEngine: Display: Unloading WwiseSoundEngine
 ChromaSDKPlugin failed to load!
 
-Took 137.21s to run Stalker2ModEditor-Win64-Shipping-Cmd.exe, ExitCode=0
-Cook command time: 137.22 s
+Took 109.03s to run Stalker2ModEditor-Win64-Shipping-Cmd.exe, ExitCode=0
+Cook command time: 109.04 s
 ********** COOK COMMAND COMPLETED **********
 ********** STAGE COMMAND STARTED **********
 Creating Staging Manifest...
@@ -1184,8 +1225,8 @@ Creating pak using staging manifest.
 DumpManifest: C:\Users\ian\AppData\Roaming\Unreal Engine\AutomationTool\Logs\C+Program+Files+Epic+Games+STALKER2ZoneKit\PrePak_Windows_UFSFiles.txt, NumItems: 34
 Error in PakFileRules SectionsToSave, set to include but did not specify paks!
 Error in PakFileRules Exclude, set to include but did not specify paks!
-Excluding C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Content\_Stalker_2\maps\_Stalker2_WorldMap\WorldMap_WP.umap from pak files
 Excluding C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Content\_Stalker_2\maps\_Stalker2_WorldMap\WorldMap_WP.uexp from pak files
+Excluding C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Content\_Stalker_2\maps\_Stalker2_WorldMap\WorldMap_WP.umap from pak files
 Using 0 pak order files:
 Running UnrealPak with arguments: "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject"  -cryptokeys="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\Crypto.json" -patchpaddingalign=1048576 -blocksize=1048576 -compressionformats=Oodle -compresslevel=4 -compressmethod=Kraken  -platform=Windows -compressionblocksize=256KB -CreateMultiple="C:\Users\ian\AppData\Roaming\Unreal Engine\AutomationTool\Logs\C+Program+Files+Epic+Games+STALKER2ZoneKit\PakCommands.txt"
 Running: C:\Program Files\Epic Games\STALKER2ZoneKit\Engine\Binaries\Win64\UnrealPak.exe "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject"  -cryptokeys="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\Crypto.json" -patchpaddingalign=1048576 -blocksize=1048576 -compressionformats=Oodle -compresslevel=4 -compressmethod=Kraken  -platform=Windows -compressionblocksize=256KB -CreateMultiple="C:\Users\ian\AppData\Roaming\Unreal Engine\AutomationTool\Logs\C+Program+Files+Epic+Games+STALKER2ZoneKit\PakCommands.txt"
@@ -1202,18 +1243,18 @@ LogPakFile: Display: Collected 2 files in 0.00s.
 LogPakFile: Display: Creating pak ../../../Stalker2/SavedMods/Staged/MolotovBottle/Windows/NewContent/Windows/Stalker2/Mods/MolotovBottle/Content/Paks/Windows/MolotovBottleStalker2-Windows.pak.
 OodleDataCompression: Display: Oodle v2.9.12 format for pak/iostore with method=Kraken, level=4=Normal
 LogPakFile: Display: Created pak file: ../../../Stalker2/SavedMods/Staged/MolotovBottle/Windows/NewContent/Windows/Stalker2/Mods/MolotovBottle/Content/Paks/Windows/MolotovBottleStalker2-Windows.pak
-LogPakFile: Display: CompressionFormat 0 [Oodle] : 1 files, 12805 -> 4854 bytes
+LogPakFile: Display: CompressionFormat 0 [Oodle] : 1 files, 12805 -> 4852 bytes
 LogPakFile: Display: CompressionFormat 2 [None] : 1 files, 313 -> 313 bytes
-LogPakFile: Display: Added 2 files, 5786 bytes total
+LogPakFile: Display: Added 2 files, 5784 bytes total
 LogPakFile: Display: PrimaryIndex size: 170 bytes
 LogPakFile: Display: PathHashIndex size: 32 bytes
 LogPakFile: Display: FullDirectoryIndex size: 70 bytes
-LogPakFile: Display: Compression summary: 37.91% of original size. Compressed Size 4854 bytes, Original Size 12805 bytes.
+LogPakFile: Display: Compression summary: 37.89% of original size. Compressed Size 4852 bytes, Original Size 12805 bytes.
 LogPakFile: Display: Encryption - DISABLED
 LogPakFile: Display:
 LogPakFile: Display: Writer and Compression Threads exited.
-LogPakFile: Display: UnrealPak executed in 0.022412 seconds
-Took 0.59s to run UnrealPak.exe, ExitCode=0
+LogPakFile: Display: UnrealPak executed in 0.028526 seconds
+Took 0.40s to run UnrealPak.exe, ExitCode=0
 Running UnrealPak with arguments: "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject" -CreateDLCContainer="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Mods\MolotovBottle\MolotovBottle.uplugin" -PackageStoreManifest="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\packagestore.manifest" -CookedDirectory="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows" -Commands="C:\Users\ian\AppData\Roaming\Unreal Engine\AutomationTool\Logs\C+Program+Files+Epic+Games+STALKER2ZoneKit\IoStoreCommands.txt" -ScriptObjects="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\scriptobjects.bin" -patchpaddingalign=1048576 -blocksize=1048576 -compressionformats=Oodle -compresslevel=4 -compressmethod=Kraken -compressionblocksize=256KB  -cryptokeys="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\Crypto.json" -compressionMinBytesSaved=1024 -compressionMinPercentSaved=5 -WriteBackMetadataToAssetRegistry=Disabled  -BasedOnReleaseVersionPath=C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Releases\Latest\Windows
 Running: C:\Program Files\Epic Games\STALKER2ZoneKit\Engine\Binaries\Win64\UnrealPak.exe "C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Stalker2.uproject" -CreateDLCContainer="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Mods\MolotovBottle\MolotovBottle.uplugin" -PackageStoreManifest="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\packagestore.manifest" -CookedDirectory="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows" -Commands="C:\Users\ian\AppData\Roaming\Unreal Engine\AutomationTool\Logs\C+Program+Files+Epic+Games+STALKER2ZoneKit\IoStoreCommands.txt" -ScriptObjects="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\scriptobjects.bin" -patchpaddingalign=1048576 -blocksize=1048576 -compressionformats=Oodle -compresslevel=4 -compressmethod=Kraken -compressionblocksize=256KB  -cryptokeys="C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Cooked\MolotovBottle\Windows\NewContent\Windows\Stalker2\Mods\MolotovBottle\Metadata\Crypto.json" -compressionMinBytesSaved=1024 -compressionMinPercentSaved=5 -WriteBackMetadataToAssetRegistry=Disabled  -BasedOnReleaseVersionPath=C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\Releases\Latest\Windows
 LogInit: Warning: FGenericCrashContext::SendUnprocessedIssues: Couldn't load or find File (../../../Stalker2/Saved/Crashes/UnprocessedCrashes.txt)
@@ -1245,20 +1286,20 @@ LogIoStore: Display: Creating container targets...
 OodleDataCompression: Display: Oodle v2.9.12 format for pak/iostore with method=Kraken, level=4=Normal
 LogIoStore: Display: Parsing packages...
 LogIoStore: Display: Reading package assets...
-LogIoStore: Display: Packages read 12 files in 0.01 seconds, 15,870 total bytes, 2,543,962 bytes per second
+LogIoStore: Display: Packages read 12 files in 0.01 seconds, 15,870 total bytes, 2,107,765 bytes per second
 LogIoStore: Display: Processing shader libraries, compressing with Oodle Mermaid, level 4 (Normal)
-LogShaderLibrary: Display: Created IoStoreShaderArchive header: shaders grouped in 3 groups (0 of them didn't need new indices), average uncompressed size 267895 bytes, min 45523 bytes, max 711398 bytes (r.ShaderCodeLibrary.MaxShaderGroupSize=1048576)
-LogIoStore: Display: MolotovBottle-PCD3D_SM6(PCD3D_SM6): Recompressed 69 shaders as 3 groups. Library size changed from 602 KB (1.30 : 1 ratio) to 378 KB (2.07 : 1 ratio), 62.83% of previous.
+LogShaderLibrary: Display: Created IoStoreShaderArchive header: shaders grouped in 3 groups (0 of them didn't need new indices), average uncompressed size 269606 bytes, min 45523 bytes, max 711398 bytes (r.ShaderCodeLibrary.MaxShaderGroupSize=1048576)
+LogIoStore: Display: MolotovBottle-PCD3D_SM6(PCD3D_SM6): Recompressed 69 shaders as 3 groups. Library size changed from 606 KB (1.30 : 1 ratio) to 382 KB (2.06 : 1 ratio), 63.13% of previous.
 LogIoStore: Display: Shaders processed in 0.02 seconds
 LogIoStore: Display: Initialized WriteRequestManager with MaxConcurrentSourceReads=16 (32 cores), MaxSourceBufferMemory=3072MiB
 LogIoStore: Display: Processing redirects...
 LogIoStore: Display: Creating disk layout...
 LogIoStore: Display: Ordered 12 packages using fallback bundle order
 LogIoStore: Display: Serializing container(s)...
-LogIoStore: Display: Writing and compressing took 0.01 seconds, writes to disk took 0.00 seconds for 1,168,720 bytes @ 1,997,811,965 bytes per second.
-LogIoStore: Display: MolotovBottleStalker2-Windows: Failed finding perfect hashmap for 22 items. 2 overflow buckets with 4 items.
-LogIoStore: Display: Finalize took 0.0 seconds for 1 writers to write 2,449 bytes, 1,202,376 bytes per second
-LogIoStore: Display: Writing tocs... [Physical: 150 MiB, Virtual: 2886 MiB]
+LogIoStore: Display: Writing and compressing took 0.01 seconds, writes to disk took 0.00 seconds for 1,168,720 bytes @ 2,380,770,014 bytes per second.
+LogIoStore: Display: MolotovBottleStalker2-Windows: Found perfect hashmap for 22 items.
+LogIoStore: Display: Finalize took 0.0 seconds for 1 writers to write 2,433 bytes, 1,266,000 bytes per second
+LogIoStore: Display: Writing tocs... [Physical: 149 MiB, Virtual: 2883 MiB]
 LogIoStore: Display: 17 / 22 chunks attempted to compress, by type:
 LogIoStore: Display:     ExportBundleData           12 / 12
 LogIoStore: Display:     BulkData                   5 / 5
@@ -1267,12 +1308,12 @@ LogIoStore: Display:     ShaderCodeLibrary          0 / 1
 LogIoStore: Display:     ShaderCode                 0 / 3
 LogIoStore: Display: Source bytes read:
 LogIoStore: Display:     Zen:                                  0
-LogIoStore: Display:     Loose File:                   5,703,620
-LogIoStore: Display:         ExportBundleData          3,194,804 bytes over 24 reads
+LogIoStore: Display:     Loose File:                   5,706,508
+LogIoStore: Display:         ExportBundleData          3,197,692 bytes over 24 reads
 LogIoStore: Display:         BulkData                  2,508,816 bytes over 10 reads
-LogIoStore: Display:     Memory:                         781,046
+LogIoStore: Display:     Memory:                         789,290
 LogIoStore: Display:         ShaderCodeLibrary             5,368 bytes over 2 reads
-LogIoStore: Display:         ShaderCode                  775,678 bytes over 6 reads
+LogIoStore: Display:         ShaderCode                  783,922 bytes over 6 reads
 LogIoStore: Display: Calculating stats...
 LogIoStore: Display:
 LogIoStore: Display: Container Summary
@@ -1280,9 +1321,9 @@ LogIoStore: Display: ==================
 LogIoStore: Display:
 LogIoStore: Display: Container                                               Flags      Chunk(s) #       TOC (KiB)       Raw Size (MiB)           Size (MiB)
 LogIoStore: Display: ----------------------------------------------------------------------------------------------------------------------------------------------
-LogIoStore: Display: MolotovBottleStalker2-Windows                       C/-/-/I/-              22            2.39                 3.16                 1.11 (64.68% Oodle)
+LogIoStore: Display: MolotovBottleStalker2-Windows                       C/-/-/I/-              22            2.38                 3.16                 1.11 (64.69% Oodle)
 LogIoStore: Display: ----------------------------------------------------------------------------------------------------------------------------------------------
-LogIoStore: Display: Total                                                                      22            2.39                 3.16                 1.11
+LogIoStore: Display: Total                                                                      22            2.38                 3.16                 1.11
 LogIoStore: Display:
 LogIoStore: Display: ** Flags: (C)ompressed / (E)ncrypted / (S)igned) / (I)ndexed) / (O)nDemand **
 LogIoStore: Display:
@@ -1317,7 +1358,7 @@ LogIoStore: Display: Input:      0.00 GB UExp
 LogIoStore: Display: Input:      0.00 GB UAsset
 LogIoStore: Display: Input:      0.00 GB UBulk
 LogIoStore: Display: Input:      0.00 MB for 0 Global shaders
-LogIoStore: Display: Input:      0.02 MB for 1 Shared shaders
+LogIoStore: Display: Input:      0.03 MB for 1 Shared shaders
 LogIoStore: Display: Input:      0.00 MB for 0 Unique shaders
 LogIoStore: Display: Input:      0.35 MB for 2 Inline shaders
 LogIoStore: Display:
@@ -1328,17 +1369,17 @@ LogIoStore: Display: Output:        0 Public runtime script objects
 LogIoStore: Display: Output:     0.00 GB HeaderData
 LogIoStore: Display: Output:     0.00 MB InitialLoadData
 LogIoStore: Display:
-LogPakFile: Display: UnrealPak executed in 0.089164 seconds
+LogPakFile: Display: UnrealPak executed in 0.092920 seconds
 Took 0.34s to run UnrealPak.exe, ExitCode=0
 DumpManifest: C:\Users\ian\AppData\Roaming\Unreal Engine\AutomationTool\Logs\C+Program+Files+Epic+Games+STALKER2ZoneKit\FinalCopyWin64_UFSFiles.txt, NumItems: 35
 Copying NonUFSFiles to staging directory: C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Staged\MolotovBottle\Windows\NewContent\Windows
 Done copying NonUFSFiles
 Copying DebugFiles to staging directory: C:\Program Files\Epic Games\STALKER2ZoneKit\Stalker2\SavedMods\Staged\MolotovBottle\Windows\NewContent\Windows
 Done copying DebugFiles
-Stage command time: 1.07 s
+Stage command time: 0.82 s
 ********** STAGE COMMAND COMPLETED **********
-GSC Cook Mod - NewContent time: 139.79 s
+GSC Cook Mod - NewContent time: 110.33 s
 ********** GSC COOK MOD - NEWCONTENT COMPLETED **********
 BUILD SUCCESSFUL
-AutomationTool executed for 0h 2m 21s
+AutomationTool executed for 0h 1m 50s
 AutomationTool exiting with ExitCode=0 (Success)

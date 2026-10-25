@@ -291,12 +291,32 @@ def build_fire_mat(name):
     wire(clamp, "", wpo, "A")
     wire(sway, "", wpo, "B")
 
-    mma = node(unreal.MaterialExpressionMakeMaterialAttributes, 400, 400)
-    wire(emissive, "", mma, "EmissiveColor")
-    wire(wpo, "", mma, "WorldPositionOffset")
-    wire(opacity, "", mma, "Opacity")
-    mat.set_editor_property("use_material_attributes", True)
-    MEL.connect_material_property(mma, "", unreal.MaterialProperty.MP_FRONT_MATERIAL)
+    # direct pins: MP_FRONT_MATERIAL is the Substrate input — this game doesn't
+    # run Substrate, so everything wired through it compiled to defaults
+    # (emissive black + opacity 1.0 = the opaque black cards)
+    assert MEL.connect_material_property(
+        emissive, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR
+    ), "emissive pin failed"
+    assert MEL.connect_material_property(
+        opacity, "", unreal.MaterialProperty.MP_OPACITY
+    ), "opacity pin failed"
+    # GSC's Python enum lacks MP_WORLD_POSITION_OFFSET; WPO sway is cosmetic
+    # (cards ship invisible) so skip gracefully if no spelling matches
+    wpo_pin = next(
+        (
+            getattr(unreal.MaterialProperty, n)
+            for n in ("MP_WORLD_POSITION_OFFSET", "MP_WORLDPOSITIONOFFSET")
+            if hasattr(unreal.MaterialProperty, n)
+        ),
+        None,
+    )
+    if wpo_pin is not None:
+        assert MEL.connect_material_property(wpo, "", wpo_pin), "wpo pin failed"
+    else:
+        unreal.log_warning(
+            "WPO pin not in MaterialProperty enum; available: "
+            + ", ".join(n for n in dir(unreal.MaterialProperty) if n.startswith("MP_"))
+        )
 
     unreal.log("PHASE: recompile")
     MEL.recompile_material(mat)
