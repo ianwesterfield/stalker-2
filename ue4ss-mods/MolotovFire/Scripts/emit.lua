@@ -1,10 +1,9 @@
 -- live Niagara emitter A/B on the lit rag fire; run from UE4SS console:
---   EMIT="smoke_4" EN=0 dofile("ue4ss/Mods/MolotovFire/Scripts/emit.lua")
---   EMIT="all" EN=0 dofile(...)          -- kill every emitter (sanity: card must die)
---   dofile(...)                          -- no vars = just report component state
+--   dofile("ue4ss/Mods/MolotovFire/Scripts/emit.lua")   -- report real handle names + state
+--   EMIT="smoke" EN=0 dofile(...)                       -- disable one emitter by handle
+--   EMIT="all" EN=0 dofile(...)   -- kill every handle (sanity: card MUST die)
 local target = EMIT or ""
 local enable = (tonumber(EN) or 0) ~= 0
-local NAMES = { "embers001_1", "fire001_1", "NiagaraEmitter_2", "smoke_4" }
 ExecuteInGameThread(function()
     local comps = FindAllOf("NiagaraComponent") or {}
     local found = 0
@@ -22,9 +21,30 @@ ExecuteInGameThread(function()
             pcall(function() act = tostring(c:IsActive()) end)
             pcall(function() solo = tostring(c:GetForceSolo()) end)
             print(string.format("[emit] %s active=%s solo=%s\n", c:GetFullName(), act, solo))
-            local list = (target == "all") and NAMES or { target }
-            for _, en in ipairs(list) do
-                if en ~= "" then
+            -- real handle names: raw-read the system's EmitterHandles (python-protected,
+            -- UE4SS reflection reads it). SetEmitterEnable matches THESE names only.
+            local handles = {}
+            local okH, errH = pcall(function()
+                local arr = c:GetAsset().EmitterHandles
+                for i = 1, #arr do
+                    local nm, en2 = "?", "?"
+                    pcall(function()
+                        local h = arr[i]
+                        pcall(function() h = h:get() end)
+                        pcall(function() nm = h.Name:ToString() end)
+                        pcall(function() en2 = tostring(h.bIsEnabled) end)
+                    end)
+                    if nm ~= "?" then handles[#handles + 1] = nm end
+                    print(string.format("[emit] handle %d: %s enabled=%s\n", i, nm, en2))
+                end
+            end)
+            if not okH then print("[emit] EmitterHandles read ERR: " .. tostring(errH) .. "\n") end
+            if target ~= "" then
+                pcall(function() c:SetForceSolo(true) end)
+                pcall(function() solo = tostring(c:GetForceSolo()) end)
+                print("[emit] solo now=" .. solo .. "\n")
+                local list = (target == "all") and handles or { target }
+                for _, en in ipairs(list) do
                     local ok, err = pcall(function() c:SetEmitterEnable(FName(en), enable) end)
                     print(string.format("[emit] %s -> %s : %s\n",
                         en, tostring(enable), ok and "ok" or tostring(err)))
