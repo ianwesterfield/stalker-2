@@ -1077,9 +1077,11 @@ ragFire = function(anim, attempt)
                 comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
                 pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
                 pcall(function() comp:Activate(true) end)
-                -- all 4 emitters kept (Fire001/embers/embers001/smoke): live A/B 2026-10-24
-                -- proved none of them is the black card — that's the mesh flame shells
-                -- (slots 3/4), killed via OpacityBoost 0.0 in the cooked material
+                -- smoke off on the HELD fire only: it is a lit translucent sprite
+                -- spawning at the rag bone, so sprinting pushes the camera through it
+                -- and blanks the view for a frame. Must follow Activate — SetEmitterEnable
+                -- before the system is live is a silent no-op.
+                pcall(function() comp:SetEmitterEnable(FName("smoke"), false) end)
                 fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
                 log("ragfire: lit attempt " .. attempt .. " (" .. nsPath:match("([^/]+)$") .. ")")
             end)
@@ -1103,7 +1105,230 @@ douseRagFire = function(why)
     end)
 end
 
+-- ===== pin-pull splice =====
+-- The throw runs RGD5 montages whose first section is literally named "TearOff":
+-- the pin yank, on a bottle that has no pin. GSC authored it as its own section on
+-- both the weapon and the body montage, so the cut point is read from the asset
+-- rather than guessed (0.500s two-handed, 0.833s with the detector up).
+--   jump = start at the section boundary; the montage blend-in covers the pose change
+--   warp = play TearOff at MP_WARP_RATE instead, which cuts nothing and still fires
+--          every notify, so it is the fallback if skipping breaks the throw
+-- Also logs "mp,<who>,<pos>,<rate>,<section>,<x>,<y>,<z>,<hands>,<pop>" per frame.
+local MP_ENABLED   = true
+local MP_VERBOSE   = false    -- per-frame CSV + section/notify dumps + debug keys
+local MP_MODE      = "jump"   -- off | jump | warp
+local MP_WARP_RATE = 6.0
+local MP_STEP      = 1 / 30
+local MP_MAX_LINES = 400      -- per montage, so a looping one cannot flood the log
+local MP_TEAR      = "tearoff"
+
+local mp = { cur = {}, bones = {}, freeze = false, step = 0, hooked = false }
+
+local function mpNum(s, prop)
+    local v
+    if not pcall(function() v = s[prop] end) then return -1 end
+    return type(v) == "number" and v or -1
+end
+
+local function mpFName(s, prop)
+    local v = "?"
+    pcall(function() v = s[prop]:ToString() end)
+    return v
+end
+
+local function mpShort(o)
+    local n = "?"
+    pcall(function()
+        local f = o:GetFullName()
+        n = f:match("([^%.]+)$") or f
+    end)
+    return n
+end
+
+local function mpDump(who, m)
+    local len = mpNum(m, "SequenceLength")
+    if len < 0 then pcall(function() len = m:GetPlayLength() end) end
+    log(string.format("mp: >>> %s %s len=%.3f", who, mpShort(m), len))
+    pcall(function()
+        m.CompositeSections:ForEach(function(i, e)
+            local s = e:get()
+            log(string.format("mp:   sec[%s] %s begin=%.3f link=%.3f seglen=%.3f",
+                tostring(i), mpFName(s, "SectionName"), mpNum(s, "SegmentBeginTime"),
+                mpNum(s, "LinkValue"), mpNum(s, "SegmentLength")))
+        end)
+    end)
+    pcall(function()
+        m.Notifies:ForEach(function(i, e)
+            local n = e:get()
+            log(string.format("mp:   ntf[%s] %s t=%.3f dur=%.3f",
+                tostring(i), mpFName(n, "NotifyName"), mpNum(n, "LinkValue"),
+                mpNum(n, "Duration")))
+        end)
+    end)
+end
+
+-- End of the pin-pull section; nil for montages that have none (equip, detector).
+local function mpTearEnd(m)
+    local at
+    pcall(function()
+        m.CompositeSections:ForEach(function(_, e)
+            local s = e:get()
+            if mpFName(s, "SectionName"):lower() == MP_TEAR then
+                local b, l = mpNum(s, "SegmentBeginTime"), mpNum(s, "SegmentLength")
+                if b >= 0 and l > 0 then at = b + l end
+            end
+        end)
+    end)
+    return at
+end
+
+local function mpBones(who, mesh)
+    if mp.bones[who] then return mp.bones[who] end
+    local b = {}
+    pcall(function()
+        local n = mesh:GetNumBones()
+        for i = 0, n - 1 do
+            local bn = mesh:GetBoneName(i):ToString():lower()
+            if not b.l and bn:find("l_hand") then b.l = bn end
+            if not b.r and bn:find("r_hand") then b.r = bn end
+            if b.l and b.r then break end
+        end
+    end)
+    mp.bones[who] = b
+    log(string.format("mp: %s hands l=%s r=%s", who, tostring(b.l), tostring(b.r)))
+    return b
+end
+
+local function mpBoneLoc(mesh, bone)
+    if not bone then return 0, 0, 0 end
+    local v
+    if pcall(function() v = mesh:GetBoneLocation(FName(bone), 1) end) and v then   -- 1 = component space
+        return v.X or 0, v.Y or 0, v.Z or 0
+    end
+    if not mp.spaceWarned then
+        mp.spaceWarned = true
+        log("mp: component-space bone read failed - world space, stand still while sampling")
+    end
+    pcall(function() v = mesh:GetSocketLocation(FName(bone)) end)
+    if v then return v.X or 0, v.Y or 0, v.Z or 0 end
+    return 0, 0, 0
+end
+
+local function mpDist(ax, ay, az, bx, by, bz)
+    local dx, dy, dz = ax - bx, ay - by, az - bz
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+local function mpWatch(who, inst, mesh)
+    local m
+    pcall(function() m = inst:GetCurrentActiveMontage() end)
+    if not (m and m:IsValid()) then
+        mp.cur[who] = nil
+        return
+    end
+
+    local name, st = mpShort(m), mp.cur[who]
+    if not st or st.name ~= name then
+        st = { name = name, n = 0, tear = mpTearEnd(m) }
+        mp.cur[who] = st
+        if MP_VERBOSE then mpDump(who, m) end
+        if st.tear then
+            if MP_VERBOSE then
+                log(string.format("mp: %s TearOff ends %.3f - %s", who, st.tear, MP_MODE))
+            end
+            if MP_MODE == "jump" then
+                -- land just inside TearOff: letting the engine leave the section keeps
+                -- whatever next-section branch the throw input already queued
+                pcall(function() inst:Montage_SetPosition(m, st.tear - 0.002) end)
+            elseif MP_MODE == "warp" then
+                st.warping = pcall(function() inst:Montage_SetPlayRate(m, MP_WARP_RATE) end)
+            end
+        end
+    end
+
+    local pos, rate = -1, -1
+    pcall(function() pos = inst:Montage_GetPosition(m) end)
+    pcall(function() rate = inst:Montage_GetPlayRate(m) end)
+
+    if st.warping and pos >= (st.tear or 0) - 0.05 then
+        st.warping = false
+        pcall(function() inst:Montage_SetPlayRate(m, 1.0) end)
+    end
+
+    if mp.freeze then
+        st.frozen = true
+        pcall(function() inst:Montage_SetPlayRate(m, 0.0) end)
+        if mp.step ~= 0 then
+            pcall(function() inst:Montage_SetPosition(m, math.max(0, pos + mp.step)) end)
+        end
+    elseif st.frozen then
+        st.frozen = false
+        pcall(function() inst:Montage_SetPlayRate(m, 1.0) end)
+    end
+
+    st.n = st.n + 1
+    if not MP_VERBOSE or st.n > MP_MAX_LINES then return end
+
+    local sec = "?"
+    pcall(function() sec = inst:Montage_GetCurrentSection(m):ToString() end)
+    local b = mpBones(who, mesh)
+    local lx, ly, lz = mpBoneLoc(mesh, b.l)
+    local rx, ry, rz = mpBoneLoc(mesh, b.r)
+    if not st.ref then st.ref = { lx, ly, lz, rx, ry, rz } end
+    local r = st.ref
+    log(string.format("mp,%s,%.3f,%.2f,%s,%.1f,%.1f,%.1f,%.1f,%.1f",
+        who, pos, rate, sec, lx, ly, lz,
+        mpDist(lx, ly, lz, rx, ry, rz),
+        mpDist(lx, ly, lz, r[1], r[2], r[3]) + mpDist(rx, ry, rz, r[4], r[5], r[6])))
+end
+
+local function mpTick()
+    if not fp.rag then return end   -- our molotov is the only thing worth sampling
+    local wm = fp.mesh
+    if not (wm and wm:IsValid()) then return end
+    local ai, body
+    pcall(function() ai = wm.AnimScriptInstance end)
+    if ai and ai:IsValid() then pcall(mpWatch, "wpn", ai, wm) end
+    pcall(function() body = wm:GetAttachParent() end)
+    if body and body:IsValid() then
+        local bi
+        pcall(function() bi = body.AnimScriptInstance end)
+        if bi and bi:IsValid() then pcall(mpWatch, "body", bi, body) end
+    end
+    mp.step = 0
+end
+
+local function mpHook()
+    if mp.hooked then return end
+    mp.hooked = pcall(function()
+        RegisterHook(HUD_TICK_HOOK, function() pcall(mpTick) end)
+    end)
+    log("mp: montage probe " .. (mp.hooked and ("armed, mode " .. MP_MODE) or "hook FAILED"))
+end
+
+-- plain-data intents only: UObject work from a keybind races the per-frame hook
+local MP_MODES = { "off", "jump", "warp" }
+local function mpCycleMode()
+    local i = 1
+    for n, v in ipairs(MP_MODES) do if v == MP_MODE then i = n end end
+    MP_MODE = MP_MODES[(i % #MP_MODES) + 1]
+    log("mp: mode -> " .. MP_MODE)
+end
+
+local function mpBind(name, k, fn)
+    if not k then return name .. "=MISSING" end
+    return name .. (pcall(function() RegisterKeyBind(k, fn) end) and "=ok" or "=FAILED")
+end
+if MP_ENABLED and MP_VERBOSE then
+    log("mp: keys " .. table.concat({
+        mpBind("\\mode", Key.OEM_FIVE, mpCycleMode),
+        mpBind("[freeze", Key.OEM_FOUR, function() mp.freeze = not mp.freeze end),
+        mpBind("]step", Key.OEM_SIX, function() mp.step = MP_STEP end),
+    }, " "))
+end
+
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+    if MP_ENABLED then mpHook() end   -- main-state context: async registration stores a dead ref
     kickRagPhysics(anim, 1)
     if RAG_FIRE_ENABLED then ragFire(anim, 1) end
     if FP_SWAP_ENABLED then
@@ -1134,8 +1359,8 @@ LoopAsync(500, function()
     return false
 end)
 
--- F7: prototype-registration oracle — call the dev cheat UFunctions directly.
-
+-- Finds a live (non-CDO) instance of a native class; the console managers are
+-- only usable this way.
 local function liveInstance(className)
     local all = FindAllOf(className)
     if all then
@@ -1147,13 +1372,70 @@ local function liveInstance(className)
     return nil
 end
 
-RegisterKeyBind(Key.F7, function()   -- user pref: F7 spawn (game's F7 use tolerable)
+-- Holding the lit bottle singes: slow HP drain while the rag fire burns in hand.
+-- Gate = fp.rag (the Niagara fire is literally lit; douse paths clear it on throw
+-- and holster). XDealDamage hits by UID; Type 1 = EDamageType::Burn. The floor
+-- keeps carelessness painful but never lethal.
+local HOLD_BURN_HP = 0.5         -- per tick
+local HOLD_BURN_PERIOD = 1500    -- ms between ticks (~0.33 HP/s)
+local HOLD_BURN_FLOOR = 8.0      -- stop singeing below this HP
+local holdBurn = { n = 0, probed = false, lastHp = nil, mode = "damage" }
+
+LoopAsync(HOLD_BURN_PERIOD, function()
+    if not fp.rag then
+        holdBurn.n, holdBurn.probed, holdBurn.lastHp = 0, false, nil
+        return false
+    end
     ExecuteInGameThread(function()
-        local rk = liveInstance("CustomConsoleManagerRK")
-        if not rk then log("F7: no CustomConsoleManagerRK instance") return end
-        local ok, err = pcall(function() rk:XCreateItemInInventoryByID("GrenadeMolotov", 0, 10, 1.0) end)
-        log("F7: +10 GrenadeMolotov -> " .. (ok and "ok" or tostring(err)))
+        pcall(function()
+            if not (fp.rag and fp.rag:IsValid()) then return end
+            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+            local rk = liveInstance("CustomConsoleManagerRK")
+            local pawn
+            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+            -- this never fired once in testing and every exit here is silent,
+            -- so say which piece is missing
+            if not holdBurn.probed then
+                holdBurn.probed = true
+                log(string.format("hold-burn: probe cm=%s rk=%s pawn=%s",
+                    tostring(cm ~= nil), tostring(rk ~= nil), tostring(pawn ~= nil)))
+            end
+            if not (cm and cm:IsValid() and rk and pawn and pawn:IsValid()) then return end
+            local hp = cm:ObjGetHP(pawn)
+            local uid = cm:GetGUID(pawn)
+            if holdBurn.n == 0 then
+                log(string.format("hold-burn: hp=%s uid=%s", tostring(hp), tostring(uid)))
+            end
+            if type(hp) == "number" and hp <= HOLD_BURN_FLOOR then return end
+
+            -- XDealDamage is proven on NPC UIDs but unproven on the player's;
+            -- if HP refuses to move, switch to the effect system instead
+            if holdBurn.mode == "damage" and holdBurn.n >= 2
+                and type(hp) == "number" and type(holdBurn.lastHp) == "number"
+                and hp >= holdBurn.lastHp then
+                holdBurn.mode = "effect"
+                log("hold-burn: XDealDamage did not move player HP -> MolotovHandSinge")
+            end
+            holdBurn.lastHp = hp
+
+            if holdBurn.mode == "damage" and type(uid) == "number" and uid ~= 0 then
+                rk:XDealDamage(uid, HOLD_BURN_HP, 0.0, 0.0, 0.0, 0.0, 1, "")
+            else
+                if holdBurn.mode == "damage" then
+                    holdBurn.mode = "effect"
+                    log("hold-burn: player UID unreadable -> MolotovHandSinge")
+                end
+                pcall(function() rk:XApplyEffectOnPlayer("MolotovHandSinge") end)
+            end
+            holdBurn.n = holdBurn.n + 1
+            if holdBurn.n == 1 or holdBurn.n % 10 == 0 then
+                log(string.format("hold-burn: tick %d (hp %s, %s)", holdBurn.n,
+                    type(hp) == "number" and string.format("%.1f", hp) or "?",
+                    holdBurn.mode))
+            end
+        end)
     end)
+    return false
 end)
 
 local function posStep() return fineStep and 0.5 or 2 end
@@ -1321,6 +1603,178 @@ tuneBind(Key.OEM_MINUS, function() queueNudge({ "rot", "rz", -1 }) end)
 tuneBind(Key.OEM_PLUS, function() queueNudge({ "rot", "rz", 1 }) end)
 tuneBind(Key.V, function() queueNudge({ "vis" }) end)
 tuneBind(Key.K, function() queueNudge({ "lock" }) end)
+
+-- Craft chain probes. Logs all three counts so a partial run (vodka taken but no
+-- molotov) is distinguishable from the If gate refusing outright.
+-- The backpack never repaints when items change underneath it, so a craft looks
+-- like it did nothing until you close the screen. Nudge the live widget instead.
+-- SortInventory would also rebuild but reorders the player's pack, so it is out.
+-- Repaint the backpack after we edit it. Only ever called from the craft path,
+-- where the player is demonstrably standing in an open inventory: the 3:10pm
+-- crash came from bursting this during a firefight (bandaging moves the kit in
+-- and out), poking a torn-down widget. pcall cannot catch that AV, so the guard
+-- has to be "is it actually on screen", not a try/catch.
+-- Only UpdateInputDependent: OnVisibilityChangedEvent is an engine-fed handler.
+local function nudgeInventoryUI()
+    local inv
+    pcall(function() inv = liveInstance("InventoryNew") end)
+    if not (inv and inv:IsValid()) then return end
+    local visible = false
+    pcall(function() visible = inv:IsVisible() end)
+    if not visible then return end
+    pcall(function() inv:UpdateInputDependent() end)
+end
+
+-- The quest chain lands one node at a time, so repaint across the whole window.
+local function nudgeBurst(count, interval)
+    for i = 0, count - 1 do
+        ExecuteWithDelay(i * interval, function()
+            ExecuteInGameThread(function() pcall(nudgeInventoryUI) end)
+        end)
+    end
+end
+
+local function craftFire(tag, sid, done)
+    ExecuteInGameThread(function()
+        local ok, err = pcall(function()
+            local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+            local aa = liveInstance("CustomConsoleManagerAA")
+            local pawn
+            pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+            if not (aa and cm and cm:IsValid() and pawn and pawn:IsValid()) then
+                log("craft: missing aa/cm/pawn")
+                if done then done() end
+                return
+            end
+            local function counts()
+                return cm:GetItemsCountInInventory(pawn, "Vodka"),
+                       cm:GetItemsCountInInventory(pawn, "Bandage"),
+                       cm:GetItemsCountInInventory(pawn, "GrenadeMolotov")
+            end
+            local v0, b0, m0 = counts()
+            log(string.format("craft[%s]: before vodka=%s bandage=%s molotov=%s",
+                tag, tostring(v0), tostring(b0), tostring(m0)))
+            local okC, errC = pcall(function() aa:XStartQuestNodeBySID(sid) end)
+            if not okC then log("craft: call ERR " .. tostring(errC)) end
+            nudgeBurst(12, 250)
+            ExecuteWithDelay(900, function()
+                ExecuteInGameThread(function()
+                    local v1, b1, m1 = counts()
+                    log(string.format("craft[%s]: after  vodka=%s bandage=%s molotov=%s",
+                        tag, tostring(v1), tostring(b1), tostring(m1)))
+                    if type(m1) == "number" and type(m0) == "number" and m1 > m0 then
+                        log("craft: SUCCESS - rag-wrapped a bottle")
+                    else
+                        log("craft: no molotov granted")
+                    end
+                    pcall(nudgeInventoryUI)
+                    if done then done() end
+                end)
+            end)
+        end)
+        if not ok then
+            log("craft ERR: " .. tostring(err))
+            if done then done() end
+        end
+    end)
+end
+
+-- Skif knows the recipe, so the kit is his: it appears in the pack whenever the
+-- ingredients are on hand and is taken back when they are not. The game has no
+-- "unusable item" state to grey out, so presence is the affordance.
+-- The quest's If gate does NOT block when fired directly (it ran the True branch
+-- on an empty pack), so the ingredient check is enforced here.
+local KIT_SID = "MolotovKit"
+local kitWatch = { last = nil, busy = false }
+
+local function fireNode(sid)
+    local aa = liveInstance("CustomConsoleManagerAA")
+    if aa then pcall(function() aa:XStartQuestNodeBySID(sid) end) end
+end
+
+local function grantKit()
+    local rk = liveInstance("CustomConsoleManagerRK")
+    if rk then pcall(function() rk:XCreateItemInInventoryByID(KIT_SID, 0, 1, 1.0) end) end
+end
+
+-- hold the latch until the pack settles, so our own edit is not read as a use
+local function kitSettle(cm, pawn)
+    ExecuteWithDelay(500, function()
+        ExecuteInGameThread(function()
+            pcall(function() kitWatch.last = cm:GetItemsCountInInventory(pawn, KIT_SID) end)
+            kitWatch.busy = false
+        end)
+    end)
+end
+
+local function kitPoll()
+    if kitWatch.busy then return end
+    local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+    local pawn
+    pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
+    if not (cm and cm:IsValid() and pawn and pawn:IsValid()) then return end
+    local kit = cm:GetItemsCountInInventory(pawn, KIT_SID)
+    local vodka = cm:GetItemsCountInInventory(pawn, "Vodka")
+    local bandage = cm:GetItemsCountInInventory(pawn, "Bandage")
+    if type(kit) ~= "number" then return end
+
+    local prev = kitWatch.last
+    kitWatch.last = kit
+    local ready = type(vodka) == "number" and type(bandage) == "number"
+        and vodka >= 1 and bandage >= 1
+
+    -- a use is only the player's when the kit was there and the pack was ready
+    if prev and kit < prev and ready then
+        kitWatch.busy = true
+        log(string.format("craft: kit used (vodka=%d bandage=%d)", vodka, bandage))
+        -- hand the kit straight back, before the craft runs, so it is missing for
+        -- one poll rather than the whole chain
+        grantKit()
+        -- fire the removals directly: the If gate adds a hop and does not gate anyway
+        craftFire("kit", "MolotovCraft_TakeVodka", function()
+            nudgeBurst(6, 250)
+            kitSettle(cm, pawn)
+        end)
+        return
+    end
+
+    -- otherwise keep the kit's presence in step with the ingredients. No UI nudge
+    -- here: this fires during combat and looting, when the backpack is not open.
+    if ready and kit < 1 then
+        kitWatch.busy = true
+        grantKit()
+        log("craft: kit to hand (vodka and bandage available)")
+        kitSettle(cm, pawn)
+    elseif not ready and kit >= 1 then
+        kitWatch.busy = true
+        fireNode("MolotovCraft_TakeKit")
+        log(string.format("craft: kit stowed (vodka=%s bandage=%s)",
+            tostring(vodka), tostring(bandage)))
+        kitSettle(cm, pawn)
+    end
+end
+
+LoopAsync(250, function()
+    ExecuteInGameThread(function() pcall(kitPoll) end)
+    return false
+end)
+
+-- F7 fires the chain directly (dev fallback if the kit watcher misses a use).
+RegisterKeyBind(Key.F7, function()
+    craftFire("hotkey", "MolotovCraft_Entry")
+end)
+
+-- F10: dev only — restock vodka for craft testing. The kit arrives on its own.
+-- (F11 is the game's window toggle, F8 quickload, F5 quicksave.)
+RegisterKeyBind(Key.F10, function()
+    ExecuteInGameThread(function()
+        local rk = liveInstance("CustomConsoleManagerRK")
+        if not rk then return end
+        pcall(function() rk:XCreateItemInInventoryByID("Vodka", 0, 5, 1.0) end)
+        log("craft: +5 vodka")
+        nudgeBurst(6, 250)
+    end)
+end)
 
 -- F9: object dump without the CTRL+O GUI (no PDA conflict, no focus juggling)
 RegisterKeyBind(Key.F9, function()

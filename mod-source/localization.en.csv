@@ -1,3 +1,5 @@
 namespace,key,text
 ST_S2BaseGameLocalization,sid_items_GrenadeMolotov_name,Molotov Cocktail
 ST_S2BaseGameLocalization,sid_items_GrenadeMolotov_description,"A bottle of Cossacks Vodka with a fuel-soaked rag stuffed in the neck. The Zone's oldest recipe: one part anti-radiation remedy, one part crowd control. Shatters on detonation and soaks the area in burning fuel. Mutant packs hate this one simple trick."
+ST_S2BaseGameLocalization,sid_items_MolotovKit_name,Bottle Prep Kit
+ST_S2BaseGameLocalization,sid_items_MolotovKit_description,"A strip of oiled rag, a funnel and a stub of wire, bundled with a cord. Skif's own — every stalker worth the name carries one. Use it with a bottle of vodka and a bandage to hand, and you'll wrap a Molotov. The kit survives the job; the vodka does not."

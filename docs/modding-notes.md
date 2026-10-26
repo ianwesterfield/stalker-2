@@ -13,10 +13,44 @@ this is the _how_ and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS
   ground truth for the syntax.
 - `{bpatch}` merges by struct name **at root level only** — nested `{bpatch}` silently does
   nothing (tested v1–v7 on ItemGeneratorPrototypes).
+- **New entries need `{refurl}`, not just `{bpatch}`.** A mod cfg in a `GameData/<Collection>/`
+  subdir only registers its NEW root structs if the file binds to the vanilla collection via
+  `{refurl=../<Collection>.cfg;refkey=<existing sibling SID>}`. `{bpatch}` edits an existing
+  entry by name but does **not** bind the file, so plain new entries beside it are dropped in
+  silence. Cost ~6 game restarts to isolate: a node that worked kept working only because an
+  unrelated `refurl` entry sat in the same file; deleting that entry killed the others while
+  the `{bpatch}` in the same file carried on working.
 - Items resolve to their `refkey` parent when the child prototype is missing — purchased
   molotovs in a save transmuted to RGD-5s when the mod was disabled. Permanent; rebuy.
 - Stale pak gotcha: UE mounts **any** pak under `Content\Paks` — renaming `~mods` does not
   disable it. A duplicate pak double-registered locres and broke item names.
+- cfgs have **no comment syntax** — no `--`, `//` or `#`. A comment header fails the parse.
+- cfgs can reference plugin assets: `Texture2D'/MolotovBottle/T_MolotovKitIcon...'` resolves
+  the same way the mesh prototypes already point at `/MolotovBottle/SK_MolotovBottle`.
+
+## Quest scripting (the only inventory-removal verb)
+
+- There is **no native item-removal API** — all 42 `CustomConsoleManager*` classes were
+  enumerated; `XCreateItemInInventoryByID` adds, and a negative count silently no-ops.
+  `EQuestNodeType::ItemRemove` is the only way to take an item off the player.
+- Lua drives it: `CustomConsoleManagerAA:XStartQuestNodeBySID("<node>")` fires a node directly,
+  even when its host quest was never started.
+- Firing a node **starts its host quest**, which then runs that quest's own
+  `LaunchOnQuestStart` chain — hosting on `Bossfight_EquipTEST` dumped its whole dev loadout on
+  every craft. Host on a vanilla quest with **zero nodes** (only 13 exist;
+  `AnomalyTestMapSpawnOnStart` is the one in use) so there is nothing to cascade.
+- **New quests never register** — only new _nodes_ do. Don't ship a `QuestPrototypes` file.
+- Node fields are `ItemSID` / `ItemsCount`. The names `ItemPrototypeSID` / `ItemsCount` appear
+  only _inside_ `Conditions`, where values are wrapped as
+  `struct.begin VariableType=... VariableValue=... struct.end`.
+- Nodes chain through `Launchers[N].Connections[N].SID` — these are **incoming** links (each
+  node declares what launches it); `If` branches are picked by `Name = True` / `Name = False`.
+- `refkey` also inherits the parent's `Launchers`. Override with an explicit empty
+  `Launchers : struct.begin / struct.end` on any node that should only fire manually.
+- **An `If` node fired directly does NOT evaluate its Conditions** — it runs the True branch
+  regardless (a kit used with an empty pack still crafted). Gate in Lua instead.
+- `PlaySound` takes an `AKEventPath` Wwise asset plus a `SoundLocation`; `0,0,0` is what
+  vanilla uses for music, i.e. non-positional 2D.
 
 ## Grenade system
 

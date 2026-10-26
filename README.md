@@ -66,9 +66,19 @@ Techniques worth stealing:
 
 [MolotovFire](ue4ss-mods/MolotovFire/Scripts/main.lua): impact detonation via the grenade's hit
 event (vanilla `BP_grenade` is timer-only), ground fire patches spawned from `BP_BonFire` with
-staggered lifetimes, soft-landing fuse fallback, debug spawn keybind (F7), the burning-rag fire
-itself (`NS_Character_Fire` attached to `jnt_fuse`, doused on throw), the rag physics kick
-(pooled weapon meshes never create physics state on their own), and flight-look material pinning.
+staggered lifetimes, soft-landing fuse fallback, the burning-rag fire itself
+(`NS_Character_Fire` attached to `jnt_fuse`, doused on throw), the rag physics kick
+(pooled weapon meshes never create physics state on their own), flight-look material pinning,
+and two field rules: **kit crafting** (a Bottle Prep Kit rides in your pack whenever you carry
+vodka and a bandage, and vanishes when you don't; using it spends one of each and wraps a
+molotov — crafting costs you the backpack trip, not a hotkey) and a
+**hold singe** — while the rag burns in hand you slowly take Burn damage (`XDealDamage`,
+~0.33 HP/s, floored so it can't kill you). Throw it or put it away.
+
+The craft itself is a **quest-node chain** ([MolotovCraftNodes.cfg](mod/Stalker2/Content/GameLite/GameData/QuestNodePrototypes/MolotovCraftNodes.cfg)):
+`ItemRemove` is the only inventory-removal verb the game exposes — no native API exists — so
+Lua watches for the kit being used and fires the chain head with `XStartQuestNodeBySID`, and
+the quest does the vodka/bandage/molotov transaction atomically.
 
 Diagnosis kit (UE4SS console `dofile`, bottle equipped):
 [droop.lua](ue4ss-mods/MolotovFire/Scripts/droop.lua) `PARAM="X" VAL=n` scalar params on the
@@ -116,17 +126,20 @@ translation cooks "successfully" and ships as the checkerboard.
 ## In-game test checklist
 
 1. Launch (cfg pak in `~mods` and `MolotovBottle` plugin paks load automatically; UE4SS mods via `enabled.txt`).
-2. Buy from the Zalissya bartender (restocks on timer; sleep/wait if absent).
+2. Buy from the Zalissya bartender (restocks on timer; sleep/wait if absent) — or open the
+   backpack and **use the Bottle Prep Kit**: one vodka and one bandage spent, molotov in its place.
 3. Equip grenades and **cycle the grenade slot** — the molotov is its own grenade type.
 4. In hand: bottle with cloth plug, physics rag tail swinging with movement, Niagara fire +
-   smoke riding the rag, all seated on the hand and following every animation.
+   smoke riding the rag, all seated on the hand and following every animation — and your HP
+   slowly ticking down (hold singe) until you throw or holster.
 5. Throw: fire douses as the bottle leaves the hand; impact fireball + ground fire patches;
    victims tick burn damage.
 6. Drop it: static bottle twin in the world.
 
 ## Known limitations / next ideas
 
-- Inventory icon is still the vanilla Dvupalov vodka icon (`IIT_DvupalovVodka`) — custom icon pending.
+- Inventory icon is the vanilla Cossacks vodka art; the Bottle Prep Kit uses a rendered
+  composite icon (`T_MolotovKitIcon`, built by [build_icon.py](asset-pipeline/build_icon.py)).
 - In-flight bottle shows no flame (card flames retired; candidate: attach the Niagara fire to
   the thrown grenade actor).
 - The `MolotovBottle` plugin paks must be cooked locally with Zone Kit; they're not committed.
