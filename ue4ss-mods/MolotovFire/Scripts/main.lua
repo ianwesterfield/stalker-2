@@ -1105,7 +1105,230 @@ douseRagFire = function(why)
     end)
 end
 
+-- ===== pin-pull splice =====
+-- The throw runs RGD5 montages whose first section is literally named "TearOff":
+-- the pin yank, on a bottle that has no pin. GSC authored it as its own section on
+-- both the weapon and the body montage, so the cut point is read from the asset
+-- rather than guessed (0.500s two-handed, 0.833s with the detector up).
+--   jump = start at the section boundary; the montage blend-in covers the pose change
+--   warp = play TearOff at MP_WARP_RATE instead, which cuts nothing and still fires
+--          every notify, so it is the fallback if skipping breaks the throw
+-- Also logs "mp,<who>,<pos>,<rate>,<section>,<x>,<y>,<z>,<hands>,<pop>" per frame.
+local MP_ENABLED   = true
+local MP_VERBOSE   = false    -- per-frame CSV + section/notify dumps + debug keys
+local MP_MODE      = "jump"   -- off | jump | warp
+local MP_WARP_RATE = 6.0
+local MP_STEP      = 1 / 30
+local MP_MAX_LINES = 400      -- per montage, so a looping one cannot flood the log
+local MP_TEAR      = "tearoff"
+
+local mp = { cur = {}, bones = {}, freeze = false, step = 0, hooked = false }
+
+local function mpNum(s, prop)
+    local v
+    if not pcall(function() v = s[prop] end) then return -1 end
+    return type(v) == "number" and v or -1
+end
+
+local function mpFName(s, prop)
+    local v = "?"
+    pcall(function() v = s[prop]:ToString() end)
+    return v
+end
+
+local function mpShort(o)
+    local n = "?"
+    pcall(function()
+        local f = o:GetFullName()
+        n = f:match("([^%.]+)$") or f
+    end)
+    return n
+end
+
+local function mpDump(who, m)
+    local len = mpNum(m, "SequenceLength")
+    if len < 0 then pcall(function() len = m:GetPlayLength() end) end
+    log(string.format("mp: >>> %s %s len=%.3f", who, mpShort(m), len))
+    pcall(function()
+        m.CompositeSections:ForEach(function(i, e)
+            local s = e:get()
+            log(string.format("mp:   sec[%s] %s begin=%.3f link=%.3f seglen=%.3f",
+                tostring(i), mpFName(s, "SectionName"), mpNum(s, "SegmentBeginTime"),
+                mpNum(s, "LinkValue"), mpNum(s, "SegmentLength")))
+        end)
+    end)
+    pcall(function()
+        m.Notifies:ForEach(function(i, e)
+            local n = e:get()
+            log(string.format("mp:   ntf[%s] %s t=%.3f dur=%.3f",
+                tostring(i), mpFName(n, "NotifyName"), mpNum(n, "LinkValue"),
+                mpNum(n, "Duration")))
+        end)
+    end)
+end
+
+-- End of the pin-pull section; nil for montages that have none (equip, detector).
+local function mpTearEnd(m)
+    local at
+    pcall(function()
+        m.CompositeSections:ForEach(function(_, e)
+            local s = e:get()
+            if mpFName(s, "SectionName"):lower() == MP_TEAR then
+                local b, l = mpNum(s, "SegmentBeginTime"), mpNum(s, "SegmentLength")
+                if b >= 0 and l > 0 then at = b + l end
+            end
+        end)
+    end)
+    return at
+end
+
+local function mpBones(who, mesh)
+    if mp.bones[who] then return mp.bones[who] end
+    local b = {}
+    pcall(function()
+        local n = mesh:GetNumBones()
+        for i = 0, n - 1 do
+            local bn = mesh:GetBoneName(i):ToString():lower()
+            if not b.l and bn:find("l_hand") then b.l = bn end
+            if not b.r and bn:find("r_hand") then b.r = bn end
+            if b.l and b.r then break end
+        end
+    end)
+    mp.bones[who] = b
+    log(string.format("mp: %s hands l=%s r=%s", who, tostring(b.l), tostring(b.r)))
+    return b
+end
+
+local function mpBoneLoc(mesh, bone)
+    if not bone then return 0, 0, 0 end
+    local v
+    if pcall(function() v = mesh:GetBoneLocation(FName(bone), 1) end) and v then   -- 1 = component space
+        return v.X or 0, v.Y or 0, v.Z or 0
+    end
+    if not mp.spaceWarned then
+        mp.spaceWarned = true
+        log("mp: component-space bone read failed - world space, stand still while sampling")
+    end
+    pcall(function() v = mesh:GetSocketLocation(FName(bone)) end)
+    if v then return v.X or 0, v.Y or 0, v.Z or 0 end
+    return 0, 0, 0
+end
+
+local function mpDist(ax, ay, az, bx, by, bz)
+    local dx, dy, dz = ax - bx, ay - by, az - bz
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+local function mpWatch(who, inst, mesh)
+    local m
+    pcall(function() m = inst:GetCurrentActiveMontage() end)
+    if not (m and m:IsValid()) then
+        mp.cur[who] = nil
+        return
+    end
+
+    local name, st = mpShort(m), mp.cur[who]
+    if not st or st.name ~= name then
+        st = { name = name, n = 0, tear = mpTearEnd(m) }
+        mp.cur[who] = st
+        if MP_VERBOSE then mpDump(who, m) end
+        if st.tear then
+            if MP_VERBOSE then
+                log(string.format("mp: %s TearOff ends %.3f - %s", who, st.tear, MP_MODE))
+            end
+            if MP_MODE == "jump" then
+                -- land just inside TearOff: letting the engine leave the section keeps
+                -- whatever next-section branch the throw input already queued
+                pcall(function() inst:Montage_SetPosition(m, st.tear - 0.002) end)
+            elseif MP_MODE == "warp" then
+                st.warping = pcall(function() inst:Montage_SetPlayRate(m, MP_WARP_RATE) end)
+            end
+        end
+    end
+
+    local pos, rate = -1, -1
+    pcall(function() pos = inst:Montage_GetPosition(m) end)
+    pcall(function() rate = inst:Montage_GetPlayRate(m) end)
+
+    if st.warping and pos >= (st.tear or 0) - 0.05 then
+        st.warping = false
+        pcall(function() inst:Montage_SetPlayRate(m, 1.0) end)
+    end
+
+    if mp.freeze then
+        st.frozen = true
+        pcall(function() inst:Montage_SetPlayRate(m, 0.0) end)
+        if mp.step ~= 0 then
+            pcall(function() inst:Montage_SetPosition(m, math.max(0, pos + mp.step)) end)
+        end
+    elseif st.frozen then
+        st.frozen = false
+        pcall(function() inst:Montage_SetPlayRate(m, 1.0) end)
+    end
+
+    st.n = st.n + 1
+    if not MP_VERBOSE or st.n > MP_MAX_LINES then return end
+
+    local sec = "?"
+    pcall(function() sec = inst:Montage_GetCurrentSection(m):ToString() end)
+    local b = mpBones(who, mesh)
+    local lx, ly, lz = mpBoneLoc(mesh, b.l)
+    local rx, ry, rz = mpBoneLoc(mesh, b.r)
+    if not st.ref then st.ref = { lx, ly, lz, rx, ry, rz } end
+    local r = st.ref
+    log(string.format("mp,%s,%.3f,%.2f,%s,%.1f,%.1f,%.1f,%.1f,%.1f",
+        who, pos, rate, sec, lx, ly, lz,
+        mpDist(lx, ly, lz, rx, ry, rz),
+        mpDist(lx, ly, lz, r[1], r[2], r[3]) + mpDist(rx, ry, rz, r[4], r[5], r[6])))
+end
+
+local function mpTick()
+    if not fp.rag then return end   -- our molotov is the only thing worth sampling
+    local wm = fp.mesh
+    if not (wm and wm:IsValid()) then return end
+    local ai, body
+    pcall(function() ai = wm.AnimScriptInstance end)
+    if ai and ai:IsValid() then pcall(mpWatch, "wpn", ai, wm) end
+    pcall(function() body = wm:GetAttachParent() end)
+    if body and body:IsValid() then
+        local bi
+        pcall(function() bi = body.AnimScriptInstance end)
+        if bi and bi:IsValid() then pcall(mpWatch, "body", bi, body) end
+    end
+    mp.step = 0
+end
+
+local function mpHook()
+    if mp.hooked then return end
+    mp.hooked = pcall(function()
+        RegisterHook(HUD_TICK_HOOK, function() pcall(mpTick) end)
+    end)
+    log("mp: montage probe " .. (mp.hooked and ("armed, mode " .. MP_MODE) or "hook FAILED"))
+end
+
+-- plain-data intents only: UObject work from a keybind races the per-frame hook
+local MP_MODES = { "off", "jump", "warp" }
+local function mpCycleMode()
+    local i = 1
+    for n, v in ipairs(MP_MODES) do if v == MP_MODE then i = n end end
+    MP_MODE = MP_MODES[(i % #MP_MODES) + 1]
+    log("mp: mode -> " .. MP_MODE)
+end
+
+local function mpBind(name, k, fn)
+    if not k then return name .. "=MISSING" end
+    return name .. (pcall(function() RegisterKeyBind(k, fn) end) and "=ok" or "=FAILED")
+end
+if MP_ENABLED and MP_VERBOSE then
+    log("mp: keys " .. table.concat({
+        mpBind("\\mode", Key.OEM_FIVE, mpCycleMode),
+        mpBind("[freeze", Key.OEM_FOUR, function() mp.freeze = not mp.freeze end),
+        mpBind("]step", Key.OEM_SIX, function() mp.step = MP_STEP end),
+    }, " "))
+end
+
 NotifyOnNewObject(FP_ANIM_PATH, function(anim)
+    if MP_ENABLED then mpHook() end   -- main-state context: async registration stores a dead ref
     kickRagPhysics(anim, 1)
     if RAG_FIRE_ENABLED then ragFire(anim, 1) end
     if FP_SWAP_ENABLED then
