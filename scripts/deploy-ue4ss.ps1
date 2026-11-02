@@ -1,6 +1,7 @@
 # Install/refresh UE4SS (experimental) + repo Lua mods into the game.
 # -Remove uninstalls everything UE4SS-related. -Mods limits which mods deploy (default: all).
-param([switch]$Remove, [string[]]$Mods)
+# -SkipSignatures leaves the installed AOB signatures untouched.
+param([switch]$Remove, [string[]]$Mods, [switch]$SkipSignatures)
 
 . "$PSScriptRoot\paths.ps1"
 
@@ -30,6 +31,36 @@ if (-not (Test-Path $proxy)) {
 }
 else {
   Write-Host "UE4SS already present."
+}
+
+# Signatures are byte patterns over the game exe, and a GSC patch reshuffles register
+# allocation without changing the code -- the vendored patterns then miss, and a missed
+# GUObjectArray is fatal: UE4SS aborts and every Lua mod silently stops existing.
+# Re-derive it from whatever exe is installed right now instead of trusting the profile.
+if (-not $SkipSignatures) {
+  $sigDir = Join-Path $ue4ssDir "UE4SS_Signatures"
+  $exe = Join-Path $win64 "Stalker2-Win64-Shipping.exe"
+  $python = Get-Command python -ErrorAction SilentlyContinue
+
+  if (-not $python) {
+    Write-Warning "python not on PATH - keeping the vendored GUObjectArray signature"
+  }
+  else {
+    New-Item -ItemType Directory -Force -Path $sigDir | Out-Null
+    & $python.Source (Join-Path $RepoRoot "tools\find_guobjectarray.py") $exe `
+      -o (Join-Path $sigDir "GUObjectArray.lua") |
+    Select-String 'reference site|match\(es\)|^wrote'
+    if ($LASTEXITCODE -ne 0) { throw "GUObjectArray signature derivation failed" }
+  }
+
+  # The vendored ProcessLocalScriptFunction pattern is also stale, and its failure is
+  # fatal too. UE4SS's built-in scan covers it; the only casualty is creating custom
+  # UFunctions/events for Blueprints, which no mod here does.
+  $plsf = Join-Path $sigDir "ProcessLocalScriptFunction.lua"
+  if (Test-Path $plsf) {
+    Remove-Item $plsf
+    Write-Host "Removed stale ProcessLocalScriptFunction signature (built-in scan covers it)."
+  }
 }
 
 # Deploy Lua mods from the repo (repo = source of truth)
