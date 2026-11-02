@@ -64,6 +64,13 @@ if (-not $SkipEditor) {
   Stage 'HEADLESS EDITOR IMPORT'
   Assert-EditorClosed 'headless import saves SK/SM assets the GUI may hold dirty'
   $log = "$here\out\pipeline_editor.log"
+  # stale physics asset is removed on DISK before boot: EditorAssetLibrary
+  # delete_asset in the Shipping commandlet AV'd inside Force Delete (2026-11-02)
+  $stalePA = "$PluginDir\Content\SK_MolotovBottle_PhysicsAsset.uasset"
+  if (Test-Path $stalePA) {
+    Remove-Item $stalePA
+    Write-Host "pre-deleted stale physics asset (in-session delete crashes the commandlet)"
+  }
   # commandlet can't see Mods\ plugins: GSC's mod mount is GUI-only, so stage
   # the plugin the way GSC's own cook does — junction into Plugins\
   if (-not (Test-Path $Junction)) {

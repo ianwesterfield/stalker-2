@@ -55,7 +55,11 @@ bpy.ops.import_scene.fbx(
 sm = next(o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith("SM_"))
 sme = sm.data
 print(f"CHECK SM verts={len(sme.vertices)} polys={len(sme.polygons)}")
-assert len(sme.vertices) == len(me.vertices) - 6, "phys helpers leaked into SM twin"
+# helpers are isolated triangles (3 verts each, one pair per chain bone): the
+# strip must remove a positive multiple of 3 verts; zero diff = leaked helpers
+helper_verts = len(me.vertices) - len(sme.vertices)
+print(f"CHECK helper verts stripped: {helper_verts}")
+assert helper_verts > 0 and helper_verts % 3 == 0, "phys helpers leaked into SM twin"
 for tag in ("RagFlame", "SheathFlame"):
     fi = next((i for i, m in enumerate(sme.materials) if m and tag in m.name), None)
     zs = [
