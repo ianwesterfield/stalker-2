@@ -112,7 +112,9 @@ local function spawnGroundFire(x, y, z, hx, hy)
     log(string.format("FIRE: %d patches burning at %.0f %.0f %.0f", spawned, x, y, z))
 end
 
--- Extinguish expired fires.
+local refreshPoolBurns   -- fwd: assigned beside igniteNearby below
+
+-- Extinguish expired fires; while any burn, keep NPCs standing in the pool alight.
 LoopAsync(1000, function()
     if #fires == 0 then return false end
     ExecuteInGameThread(function()
@@ -125,6 +127,7 @@ LoopAsync(1000, function()
                 table.remove(fires, i)
             end
         end
+        if #fires > 0 then pcall(refreshPoolBurns) end
     end)
     return false
 end)
@@ -140,16 +143,22 @@ local function sameObj(a, b)
 end
 
 local BURN_RADIUS = 650   -- matches ExplosionMolotov ConcussionRadius
+local POOL_BURN_RADIUS = 210   -- standing in a patch's flames (visuals run 1.0-1.4x bonfire)
 
 -- Engine's TIMED detonation applies cfg ConcussionEffects; manual Explode() bypasses
 -- that wrapper (NPCs flinched but never ignited) — so burn them via the cheat shard.
-local function igniteNearby(x, y, z)
+-- Shared by the splash and the pool refresh: apply MolotovBurning to every NPC within
+-- radius of ANY point in `points` ({ {x,y,z,r}, ... }). tag=nil silences the report.
+local function burnNPCsNear(points, tag)
     local rk
     for _, o in ipairs(FindAllOf("CustomConsoleManagerRK") or {}) do
         if o:IsValid() and not o:GetFullName():find("Default__") then rk = o break end
     end
     local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
-    if not (rk and cm and cm:IsValid()) then log("ignite: no RK shard/CppMediator") return end
+    if not (rk and cm and cm:IsValid()) then
+        if tag then log(tag .. ": no RK shard/CppMediator") end
+        return
+    end
     local pawn
     pcall(function()
         local pc = UEHelpers.GetPlayerController()
@@ -161,8 +170,12 @@ local function igniteNearby(x, y, z)
             if not npc:IsValid() or npc:GetFullName():find("Default__") then return end
             if pawn and pawn:IsValid() and npc:GetAddress() == pawn:GetAddress() then return end
             local loc = npc:K2_GetActorLocation()
-            local dx, dy, dz = loc.X - x, loc.Y - y, loc.Z - z
-            if dx * dx + dy * dy + dz * dz > BURN_RADIUS * BURN_RADIUS then return end
+            local near = false
+            for _, p in ipairs(points) do
+                local dx, dy, dz = loc.X - p.x, loc.Y - p.y, loc.Z - p.z
+                if dx * dx + dy * dy + dz * dz <= p.r * p.r then near = true break end
+            end
+            if not near then return end
             local uid = cm:GetGUID(npc)
             if type(uid) == "number" and uid ~= 0 then
                 rk:XApplyEffectOnNPCByUID("MolotovBurning", uid)
@@ -170,7 +183,33 @@ local function igniteNearby(x, y, z)
             end
         end)
     end
-    log(string.format("ignite: MolotovBurning applied to %d NPC(s)", applied))
+    if tag then log(string.format("%s: MolotovBurning applied to %d NPC(s)", tag, applied)) end
+end
+
+local function igniteNearby(x, y, z)
+    burnNPCsNear({ { x = x, y = y, z = z, r = BURN_RADIUS } }, "ignite")
+end
+
+-- The pool keeps burning what stands in it. Without this, env-fire patches only ever
+-- burn the PLAYER (vanilla BurnTriggerCollider behavior) — mutants walked through the
+-- fire unfazed because the initial 15s burn can't outrun their 5%/s regen. KeepNew on
+-- the effect means each 1s pass just refreshes duration while they linger.
+local poolLogAt = 0
+refreshPoolBurns = function()
+    local pts = {}
+    for _, f in ipairs(fires) do
+        pcall(function()
+            if f.actor and f.actor:IsValid() then
+                local l = f.actor:K2_GetActorLocation()
+                pts[#pts + 1] = { x = l.X, y = l.Y, z = l.Z, r = POOL_BURN_RADIUS }
+            end
+        end)
+    end
+    if #pts == 0 then return end
+    local now = os.clock()
+    local tag = now >= poolLogAt and "pool" or nil
+    if tag then poolLogAt = now + 5 end   -- at most one report per 5s
+    burnNPCsNear(pts, tag)
 end
 
 local function detonate(t, grenade, x, y, z, how)
@@ -1246,6 +1285,12 @@ local function mpWatch(who, inst, mesh)
         end
     end
 
+    -- shipping config (jump mode, no verbose) needs nothing past the montage-change
+    -- jump above; skip the per-frame pos/rate reads — UObject traffic on a montage
+    -- that may be blending out is prime stale-ref AV surface (crash dumps 2026-10-25:
+    -- AV at 0xffffffffffffffff inside UE4SS Lua dispatch during molotov spam)
+    if not (MP_VERBOSE or mp.freeze or st.warping or st.frozen) then return end
+
     local pos, rate = -1, -1
     pcall(function() pos = inst:Montage_GetPosition(m) end)
     pcall(function() rate = inst:Montage_GetPlayRate(m) end)
@@ -1374,64 +1419,56 @@ end
 
 -- Holding the lit bottle singes: slow HP drain while the rag fire burns in hand.
 -- Gate = fp.rag (the Niagara fire is literally lit; douse paths clear it on throw
--- and holster). XDealDamage hits by UID; Type 1 = EDamageType::Burn. The floor
--- keeps carelessness painful but never lethal.
+-- and holster). The floor keeps carelessness painful but never lethal.
+--
+-- Silent by construction. Every *damage* route has feedback welded on engine-side:
+-- Burn brings the fire roar + red screen edges, Strike brings Skif's pain grunt on
+-- every tick. Obj:ForceSetHP writes HP straight in, skipping the damage pipeline
+-- entirely, so nothing reacts to it. ObjGetHP reads float but ForceSetHP takes
+-- int32 — fractional ticks bank in `debt` and land as whole points.
+local HOLD_BURN_ENABLED = true
 local HOLD_BURN_HP = 0.5         -- per tick
 local HOLD_BURN_PERIOD = 1500    -- ms between ticks (~0.33 HP/s)
 local HOLD_BURN_FLOOR = 8.0      -- stop singeing below this HP
-local holdBurn = { n = 0, probed = false, lastHp = nil, mode = "damage" }
+local holdBurn = { n = 0, probed = false, debt = 0 }
 
 LoopAsync(HOLD_BURN_PERIOD, function()
+    if not HOLD_BURN_ENABLED then return true end
     if not fp.rag then
-        holdBurn.n, holdBurn.probed, holdBurn.lastHp = 0, false, nil
+        holdBurn.n, holdBurn.probed, holdBurn.debt = 0, false, 0
         return false
     end
     ExecuteInGameThread(function()
         pcall(function()
             if not (fp.rag and fp.rag:IsValid()) then return end
             local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
-            local rk = liveInstance("CustomConsoleManagerRK")
             local pawn
             pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
-            -- this never fired once in testing and every exit here is silent,
-            -- so say which piece is missing
+            -- every exit here is silent, so say which piece is missing
             if not holdBurn.probed then
                 holdBurn.probed = true
-                log(string.format("hold-burn: probe cm=%s rk=%s pawn=%s",
-                    tostring(cm ~= nil), tostring(rk ~= nil), tostring(pawn ~= nil)))
+                log(string.format("hold-burn: probe cm=%s pawn=%s",
+                    tostring(cm ~= nil), tostring(pawn ~= nil)))
             end
-            if not (cm and cm:IsValid() and rk and pawn and pawn:IsValid()) then return end
+            if not (cm and cm:IsValid() and pawn and pawn:IsValid()) then return end
             local hp = cm:ObjGetHP(pawn)
-            local uid = cm:GetGUID(pawn)
-            if holdBurn.n == 0 then
-                log(string.format("hold-burn: hp=%s uid=%s", tostring(hp), tostring(uid)))
-            end
-            if type(hp) == "number" and hp <= HOLD_BURN_FLOOR then return end
+            if type(hp) ~= "number" or hp <= HOLD_BURN_FLOOR then return end
 
-            -- XDealDamage is proven on NPC UIDs but unproven on the player's;
-            -- if HP refuses to move, switch to the effect system instead
-            if holdBurn.mode == "damage" and holdBurn.n >= 2
-                and type(hp) == "number" and type(holdBurn.lastHp) == "number"
-                and hp >= holdBurn.lastHp then
-                holdBurn.mode = "effect"
-                log("hold-burn: XDealDamage did not move player HP -> MolotovHandSinge")
-            end
-            holdBurn.lastHp = hp
+            holdBurn.debt = holdBurn.debt + HOLD_BURN_HP
+            local whole = math.floor(holdBurn.debt)
+            if whole < 1 then return end
+            holdBurn.debt = holdBurn.debt - whole
 
-            if holdBurn.mode == "damage" and type(uid) == "number" and uid ~= 0 then
-                rk:XDealDamage(uid, HOLD_BURN_HP, 0.0, 0.0, 0.0, 0.0, 1, "")
-            else
-                if holdBurn.mode == "damage" then
-                    holdBurn.mode = "effect"
-                    log("hold-burn: player UID unreadable -> MolotovHandSinge")
-                end
-                pcall(function() rk:XApplyEffectOnPlayer("MolotovHandSinge") end)
+            local target = math.max(math.floor(HOLD_BURN_FLOOR), math.floor(hp) - whole)
+            if not pcall(function() pawn:ForceSetHP(target) end) then
+                HOLD_BURN_ENABLED = false
+                log("hold-burn: ForceSetHP rejected - singe disabled")
+                return
             end
             holdBurn.n = holdBurn.n + 1
             if holdBurn.n == 1 or holdBurn.n % 10 == 0 then
-                log(string.format("hold-burn: tick %d (hp %s, %s)", holdBurn.n,
-                    type(hp) == "number" and string.format("%.1f", hp) or "?",
-                    holdBurn.mode))
+                log(string.format("hold-burn: tick %d  hp %.1f -> %d",
+                    holdBurn.n, hp, target))
             end
         end)
     end)
@@ -1679,84 +1716,104 @@ local function craftFire(tag, sid, done)
     end)
 end
 
--- Skif knows the recipe, so the kit is his: it appears in the pack whenever the
--- ingredients are on hand and is taken back when they are not. The game has no
--- "unusable item" state to grey out, so presence is the affordance.
--- The quest's If gate does NOT block when fired directly (it ran the True branch
--- on an empty pack), so the ingredient check is enforced here.
-local KIT_SID = "MolotovKit"
-local kitWatch = { last = nil, busy = false }
+-- ===== "Make Molotov" context-menu entry =====
+-- The craft lives in the inventory right-click menu now (kit retired 2026-11-02).
+-- Menu rows are created per-open; MenuItemWidgetClass + CreateWidget + AddChild
+-- renders a real row, but native code binds row button delegates only for ITS OWN
+-- rows during population — a spawned row's click/hover events never dispatch
+-- (probe-proven: three clicks, zero hook hits) and Lua cannot AddDynamic. So we
+-- own the click: row:IsHovered() (callable native UFunction) + an LMB keybind.
+local menuCraft = { entry = nil, busy = false }
 
-local function fireNode(sid)
-    local aa = liveInstance("CustomConsoleManagerAA")
-    if aa then pcall(function() aa:XStartQuestNodeBySID(sid) end) end
-end
-
-local function grantKit()
-    local rk = liveInstance("CustomConsoleManagerRK")
-    if rk then pcall(function() rk:XCreateItemInInventoryByID(KIT_SID, 0, 1, 1.0) end) end
-end
-
--- hold the latch until the pack settles, so our own edit is not read as a use
-local function kitSettle(cm, pawn)
-    ExecuteWithDelay(500, function()
-        ExecuteInGameThread(function()
-            pcall(function() kitWatch.last = cm:GetItemsCountInInventory(pawn, KIT_SID) end)
-            kitWatch.busy = false
-        end)
-    end)
-end
-
-local function kitPoll()
-    if kitWatch.busy then return end
+local function playerCounts()
     local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
     local pawn
     pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
-    if not (cm and cm:IsValid() and pawn and pawn:IsValid()) then return end
-    local kit = cm:GetItemsCountInInventory(pawn, KIT_SID)
-    local vodka = cm:GetItemsCountInInventory(pawn, "Vodka")
-    local bandage = cm:GetItemsCountInInventory(pawn, "Bandage")
-    if type(kit) ~= "number" then return end
-
-    local prev = kitWatch.last
-    kitWatch.last = kit
-    local ready = type(vodka) == "number" and type(bandage) == "number"
-        and vodka >= 1 and bandage >= 1
-
-    -- a use is only the player's when the kit was there and the pack was ready
-    if prev and kit < prev and ready then
-        kitWatch.busy = true
-        log(string.format("craft: kit used (vodka=%d bandage=%d)", vodka, bandage))
-        -- hand the kit straight back, before the craft runs, so it is missing for
-        -- one poll rather than the whole chain
-        grantKit()
-        -- fire the removals directly: the If gate adds a hop and does not gate anyway
-        craftFire("kit", "MolotovCraft_TakeVodka", function()
-            nudgeBurst(6, 250)
-            kitSettle(cm, pawn)
-        end)
-        return
-    end
-
-    -- otherwise keep the kit's presence in step with the ingredients. No UI nudge
-    -- here: this fires during combat and looting, when the backpack is not open.
-    if ready and kit < 1 then
-        kitWatch.busy = true
-        grantKit()
-        log("craft: kit to hand (vodka and bandage available)")
-        kitSettle(cm, pawn)
-    elseif not ready and kit >= 1 then
-        kitWatch.busy = true
-        fireNode("MolotovCraft_TakeKit")
-        log(string.format("craft: kit stowed (vodka=%s bandage=%s)",
-            tostring(vodka), tostring(bandage)))
-        kitSettle(cm, pawn)
-    end
+    if not (cm and cm:IsValid() and pawn and pawn:IsValid()) then return nil end
+    local v = cm:GetItemsCountInInventory(pawn, "Vodka")
+    local b = cm:GetItemsCountInInventory(pawn, "Bandage")
+    if type(v) ~= "number" or type(b) ~= "number" then return nil end
+    return v, b
 end
 
-LoopAsync(250, function()
-    ExecuteInGameThread(function() pcall(kitPoll) end)
-    return false
+local function injectCraftEntry(menu)
+    local itemClass, box
+    pcall(function() itemClass = menu.MenuItemWidgetClass end)
+    pcall(function() box = menu.Menu end)
+    if not (itemClass and box and box:IsValid()) then return end
+    local v, b = playerCounts()
+    if not (v and v >= 1 and b >= 1) then return end   -- no makings, no menu row
+    local wbl = StaticFindObject("/Script/UMG.Default__WidgetBlueprintLibrary")
+    local w = wbl:Create(menu, itemClass, nil)
+    if not (w and w:IsValid()) then return end
+    pcall(function() w.Label:SetText(FText("Make Molotov")) end)
+    -- match native row text color (a fresh row defaults to white)
+    pcall(function()
+        local src
+        for _, c in ipairs(box:GetAllChildren()) do
+            local vis = false
+            pcall(function() vis = c:IsVisible() end)
+            if vis then src = c break end
+        end
+        if src then
+            for _, p in ipairs({ "TextColorUnhovered", "TextColorHovered" }) do
+                pcall(function()
+                    local s, d = src[p], w[p]
+                    d.SpecifiedColor.R = s.SpecifiedColor.R
+                    d.SpecifiedColor.G = s.SpecifiedColor.G
+                    d.SpecifiedColor.B = s.SpecifiedColor.B
+                    d.SpecifiedColor.A = s.SpecifiedColor.A
+                end)
+            end
+        end
+    end)
+    box:AddChild(w)
+    menuCraft.entry = w
+    log("craft: Make Molotov on the menu")
+end
+
+NotifyOnNewObject("/Game/GameLite/FPS_Game/UIRemaster/Inventory/W_RightClickMenu.W_RightClickMenu_C", function(menu)
+    menuCraft.entry = nil   -- stale row from a menu closed without a click
+    -- native rows populate right after construction; ours slots in behind them
+    ExecuteWithDelay(50, function()
+        ExecuteInGameThread(function()
+            pcall(function()
+                if menu:IsValid() then injectCraftEntry(menu) end
+            end)
+        end)
+    end)
+end)
+
+local function hideMenu()
+    pcall(function()
+        local inv = liveInstance("InventoryNew")
+        if inv then inv:HideRightClickMenu() end
+    end)
+end
+
+-- LMB fires on every trigger pull: the plain-field gate keeps combat cost at a nil check
+RegisterKeyBind(Key.LEFT_MOUSE_BUTTON, function()
+    if not menuCraft.entry or menuCraft.busy then return end
+    ExecuteInGameThread(function()
+        pcall(function()
+            local entry = menuCraft.entry
+            if not (entry and entry:IsValid()) then
+                menuCraft.entry = nil   -- menu died without a craft; re-cheapen the gate
+                return
+            end
+            if not entry:IsHovered() then return end
+            menuCraft.entry = nil
+            local v, b = playerCounts()
+            if not (v and v >= 1 and b >= 1) then hideMenu() return end
+            menuCraft.busy = true
+            log("craft: Make Molotov clicked")
+            hideMenu()
+            -- fire the removals directly: the If gate adds a hop and does not gate anyway
+            craftFire("menu", "MolotovCraft_TakeVodka", function()
+                menuCraft.busy = false
+            end)
+        end)
+    end)
 end)
 
 -- F7 fires the chain directly (dev fallback if the kit watcher misses a use).

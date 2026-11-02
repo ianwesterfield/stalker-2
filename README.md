@@ -69,16 +69,23 @@ event (vanilla `BP_grenade` is timer-only), ground fire patches spawned from `BP
 staggered lifetimes, soft-landing fuse fallback, the burning-rag fire itself
 (`NS_Character_Fire` attached to `jnt_fuse`, doused on throw), the rag physics kick
 (pooled weapon meshes never create physics state on their own), flight-look material pinning,
-and two field rules: **kit crafting** (a Bottle Prep Kit rides in your pack whenever you carry
-vodka and a bandage, and vanishes when you don't; using it spends one of each and wraps a
-molotov — crafting costs you the backpack trip, not a hotkey) and a
-**hold singe** — while the rag burns in hand you slowly take Burn damage (`XDealDamage`,
-~0.33 HP/s, floored so it can't kill you). Throw it or put it away.
+and two field rules: **menu crafting** (right-click anything in the backpack while carrying
+vodka and a bandage and a **Make Molotov** entry joins the context menu; one click spends one
+of each and wraps a bottle — the old Bottle Prep Kit item is retired but stays defined for
+save compatibility) and a **hold singe** — while the
+rag burns in hand you slowly lose HP (~0.33 HP/s, floored so it can't kill you), applied with
+`Obj:ForceSetHP` so it lands silently. Every damage-typed route drags its own feedback along:
+Burn triggers the engine's player-on-fire reaction (roaring audio that buries the mix, red
+screen edges) and Strike a pain grunt on every tick — neither reads right for merely holding a
+lit bottle. The fire in your hand is the warning.
 
 The craft itself is a **quest-node chain** ([MolotovCraftNodes.cfg](mod/Stalker2/Content/GameLite/GameData/QuestNodePrototypes/MolotovCraftNodes.cfg)):
 `ItemRemove` is the only inventory-removal verb the game exposes — no native API exists — so
-Lua watches for the kit being used and fires the chain head with `XStartQuestNodeBySID`, and
-the quest does the vodka/bandage/molotov transaction atomically.
+the menu click fires the chain head with `XStartQuestNodeBySID`, and the quest does the
+vodka/bandage/molotov transaction atomically. The menu row itself is a UE4SS injection: the
+native `W_RightClickMenu` is built per-open, a `MenuItemWidgetClass` row is spawned and added
+to its `VerticalBox`, and — because the game binds row delegates natively only for its own
+rows — the click is detected as `row:IsHovered()` + an LMB keybind rather than a button event.
 
 Diagnosis kit (UE4SS console `dofile`, bottle equipped):
 [droop.lua](ue4ss-mods/MolotovFire/Scripts/droop.lua) `PARAM="X" VAL=n` scalar params on the
@@ -95,6 +102,9 @@ scripts/build-locres.ps1       # vanilla Game.locres + mod-source CSV rows -> mo
 scripts/pack-mod.ps1           # mod/ -> build/MolotovCocktail_P.pak (repak V11, mount ../../../)
 scripts/deploy-mod.ps1         # copy into <game>/Stalker2/Content/Paks/~mods  (-Remove uninstalls)
 scripts/deploy-ue4ss.ps1       # sync ue4ss-mods/ -> <game>/Stalker2/Binaries/Win64/ue4ss/Mods
+#   also re-derives the GUObjectArray AOB from the installed exe (tools/find_guobjectarray.py):
+#   a game patch shifts register allocation, the shipped pattern misses, and UE4SS then aborts
+#   outright -- every Lua mod goes dark at once. -SkipSignatures opts out.
 
 # bottle asset (Zone Kit required; editor and game closed)
 asset-pipeline/pipeline.ps1    # Blender -> checks -> previews -> headless editor -> cook -> deploy
