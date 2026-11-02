@@ -177,10 +177,55 @@ cooks (stale pak cache).
   4. Rapid keybind handlers must queue plain data; drain the queue inside the frame hook.
   5. `RegisterHook` from inside an async context (`ExecuteWithDelay` etc.) stores a dead
      callback ref — register from main-state context only.
+  6. Even pcall'd per-frame UObject reads (montage pos/rate polling) AV under churn —
+     2026-10-25 molotov-spam dumps: `EXCEPTION_ACCESS_VIOLATION reading 0xffffffffffffffff`
+     inside UE4SS Lua dispatch. Poll only while a mode actually needs the values.
+- Player damage feedback is keyed engine-side to the damage **event**, not to the effect
+  prototype. Burn pulls the fire roar + `BurnDamageEffectProcessor` red screen edges; re-typing
+  to Strike merely swaps in that type's feedback (hit vignette plus a pain grunt that reads as
+  chewing once it repeats on a timer). For a drain with _no_ reaction, leave the damage
+  pipeline entirely: `Obj:ForceSetHP(int32)` writes HP straight in. Mind the asymmetry —
+  `CppMediator:ObjGetHP` returns float while `ForceSetHP` takes int32, so sub-point ticks have
+  to bank up and land as whole points. Siblings: `ForceSetBleeding`,
+  `ForceSetCurrentHungerPoints`. (`XDealDamage` is a dead end on the player: `GetGUID(pawn)`
+  reads 0.)
+- **A game patch kills UE4SS itself**, not just a mod. GSC recompiles shift register
+  allocation without changing the code, the vendored AOB patterns miss, and a missed
+  `GUObjectArray` is fatal — UE4SS aborts and every Lua mod silently stops existing. Symptom
+  2026-10-26: rag fire, impact detonation and rag physics all vanished at once while
+  `Stalker2.log` stayed clean; the tell is `Fatal Error: ... scan timed out` in
+  `Binaries/Win64/ue4ss/UE4SS.log`. Fix: [tools/find_guobjectarray.py](../tools/find_guobjectarray.py)
+  re-derives the pattern from the installed exe, and `deploy-ue4ss.ps1` now runs it every
+  deploy. It locates the array by _structure_, not bytes — the inlined bounds check always
+  pairs a RIP-relative `cmp [NumElements], reg` with a RIP-relative `mov r64, [Objects]` whose
+  targets sit exactly `0x14` apart (`FUObjectArray` +0x24 vs +0x10), so
+  `GUObjectArray = target(mov) - 0x10`. A pattern need not be _unique_, only unambiguous: 773
+  matches all resolving to one address is the proof. Also delete the vendored
+  `ProcessLocalScriptFunction.lua` — its miss is equally fatal, while UE4SS's built-in scan
+  covers it and the only casualty is creating custom UFunctions/events for BPs.
+- Don't hand-extend a byte pattern past a known instruction: a byte-walk can't tell opcodes
+  from operands (`C1 E8 10`, `shr eax,0x10`, reads as a `call rel32` and silently corrupts the
+  pattern). Stop at an anchor you decoded deliberately.
 - Reliable per-frame tick: HUD widget `W_UpdatedStatPanel_C:Tick`. `ReceiveTick` existing in
   reflection ≠ firing — demand proof-of-life.
 - `FindAllOf` returns subclasses; skip `Default__*`. Missing-property reads return a
   `TrivialObject` sentinel that is `~= nil` — false positives everywhere.
+- **Injecting into the inventory right-click menu** (probe series 2026-11-01/02):
+  `W_RightClickMenu_C` is constructed per-open (`NotifyOnNewObject` = the trigger), its `Menu`
+  is a plain `VerticalBox`, and `MenuItemWidgetClass` + `WidgetBlueprintLibrary:Create` +
+  `AddChild` renders a genuine styled row (copy `TextColor*` field-by-field — assigning a Lua
+  table over a struct property silently no-ops). BUT the game binds row button delegates
+  natively only for rows IT creates during population: a spawned row's
+  `OnButtonClick/Hovered` never fire and Lua cannot `AddDynamic`. Own the click instead:
+  `row:IsHovered()` is a callable native UFunction — gate an `LMB` keybind
+  (`Key.LEFT_MOUSE_BUTTON` works) on it. Keep the keybind body a plain-field nil-check;
+  it fires on every trigger pull in combat.
+- Reflection dumps of BP widgets walk ONLY the leaf class by default — `ForEachProperty` on
+  `GetClass()` misses every native-base property (that's where `ItemImage`, `SlotIndex` live).
+  Walk `GetSuperStruct()` up the chain. Struct params with no usmap coverage expose no field
+  names to Lua at all; brute-forcing names and `RegisterCustomProperty` by offset both failed
+  on `RightClickMenuItemData` — item identity via the menu stayed unsolved (icon brush reads
+  nil on the `W_Image_C` wrapper; the real texture sits deeper in its widget tree).
 - TArray elements are `RemoteUnrealParam` — `:get()` before `:ToString()`.
 - Console-verb gold on `/Script/Stalker2.CustomConsoleManager{RK,Build,AM,AA,…}`:
   `XSpawnObjBySID`, `XCreateItemInInventoryByID`, `XApplyEffectOnNPCByUID`,
