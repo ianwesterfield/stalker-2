@@ -751,6 +751,10 @@ local function fpRestore()
     pcall(function()
         if fp.rag and fp.rag:IsValid() then fp.rag:K2_DestroyComponent(fp.rag) end
     end)
+    for _, c in ipairs(fp.ragLower or {}) do
+        pcall(function() if c:IsValid() then c:K2_DestroyComponent(c) end end)
+    end
+    fp.ragLower = nil
     fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
     fp.anchor, fp.boneName, fp.baseLoc, fp.baseRot = nil, nil, nil, nil
     fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal, fp.rag = nil, nil, nil, nil, nil, nil
@@ -1071,11 +1075,27 @@ end
 -- Rag surface fire: the player-burn system's emitters sample their attach
 -- parent's skeletal mesh (NiagaraDataInterfaceSkeletalMesh), so attached to
 -- the bottle mesh the fire crawls the swinging rag itself. No sound loop.
+-- Mesh-sampling means it clusters on dense geometry (neck/plug) wherever the
+-- component sits — the TIP flame is a POSITIONAL system instead, parked on
+-- jnt_fuse_end (a real bone at the hem, courtesy of the FBX leaf-tail fix).
 local RAG_FIRE_ENABLED = true
 local RAG_FIRE_ASSETS = {
     "/Game/_Stalker_2/VFX/Player/NS_Character_Fire.NS_Character_Fire",
     "/Game/_Stalker_2/VFX/Anomalies/ClassicFire/Niagara/NS_ClassicFireNPCBurning.NS_ClassicFireNPCBurning",
 }
+local TIP_FIRE_ASSETS = {
+    -- candle first: kerosene is a campfire-scale fuel-pool system (the Bane look)
+    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle_2.NS_Fire_Candle_2",
+    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Candle.NS_Fire_Candle",
+    "/Game/_Stalker_2/VFX/Environment/Fire/Niagara/NS_Fire_Kerosene_2.NS_Fire_Kerosene_2",
+}
+local function loadFirst(paths)
+    for _, p in ipairs(paths) do
+        local a = StaticFindObject(p)
+        if not (a and a:IsValid()) then a = LoadAsset(p) end
+        if a and a:IsValid() then return a, p end
+    end
+end
 local ragFire
 ragFire = function(anim, attempt)
     ExecuteWithDelay(attempt == 1 and 400 or 500, function()
@@ -1097,32 +1117,43 @@ ragFire = function(anim, attempt)
                 local owner = mesh:GetOwner()
                 local ncClass = StaticFindObject("/Script/Niagara.NiagaraComponent")
                 if not (ncClass and ncClass:IsValid() and owner and owner:IsValid()) then return end
-                local ns, nsPath
-                for _, p in ipairs(RAG_FIRE_ASSETS) do
-                    ns = StaticFindObject(p)
-                    if not (ns and ns:IsValid()) then ns = LoadAsset(p) end
-                    if ns and ns:IsValid() then nsPath = p break end
-                end
+                local ns, nsPath = loadFirst(RAG_FIRE_ASSETS)
                 if not (ns and ns:IsValid()) then log("ragfire: no system loadable") return end
+                local tipNs, tipPath = loadFirst(TIP_FIRE_ASSETS)
                 local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
                               Translation = { X = 0, Y = 0, Z = 0 },
                               Scale3D = { X = 1, Y = 1, Z = 1 } }
-                local comp = owner:AddComponentByClass(ncClass, true, idT, false)
-                if not (comp and comp:IsValid()) then log("ragfire: AddComponentByClass failed") return end
-                comp:SetAsset(ns, true)
-                pcall(function() comp:SetFirstPersonPrimitiveType(1) end)
-                -- jnt_fuse = rag bone; root attach put the spawn volume on the grip/hand
-                comp:K2_AttachToComponent(mesh, FName("jnt_fuse"), 2, 2, 0, false)
-                comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
-                pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
-                pcall(function() comp:Activate(true) end)
-                -- smoke off on the HELD fire only: it is a lit translucent sprite
-                -- spawning at the rag bone, so sprinting pushes the camera through it
-                -- and blanks the view for a frame. Must follow Activate — SetEmitterEnable
-                -- before the system is live is a silent no-op.
-                pcall(function() comp:SetEmitterEnable(FName("smoke"), false) end)
+                local function lightAt(bone, rotRule, asset)
+                    local comp = owner:AddComponentByClass(ncClass, true, idT, false)
+                    if not (comp and comp:IsValid()) then return nil end
+                    comp:SetAsset(asset or ns, true)
+                    pcall(function() comp:SetFirstPersonPrimitiveType(1) end)
+                    -- chain links' bone frames roll with the hang line and the system's
+                    -- authored emitter offsets rotate with them (fire floated off the
+                    -- cloth) — rotRule 1 = KeepWorld pins the frame upright
+                    comp:K2_AttachToComponent(mesh, FName(bone), 2, rotRule or 2, 0, false)
+                    comp:K2_SetRelativeLocation({ X = 0, Y = 0, Z = 0 }, false, {}, false)
+                    pcall(function() comp:SetForceSolo(true) end)   -- batched sim pauses on FP parents
+                    pcall(function() comp:Activate(true) end)
+                    -- smoke off on the HELD fire only: it is a lit translucent sprite
+                    -- spawning at the rag bone, so sprinting pushes the camera through it
+                    -- and blanks the view for a frame. Must follow Activate — SetEmitterEnable
+                    -- before the system is live is a silent no-op.
+                    pcall(function() comp:SetEmitterEnable(FName("smoke"), false) end)
+                    return comp
+                end
+                -- jnt_fuse = mouth anchor: the mesh-sampling blaze. Tip = positional
+                -- flame on the hem-end bone; follows the swinging tip exactly.
+                local comp = lightAt("jnt_fuse")
+                if not comp then log("ragfire: AddComponentByClass failed") return end
+                fp.ragLower = {}
+                if tipNs then
+                    local c = lightAt("jnt_fuse_end", 1, tipNs)
+                    if c then fp.ragLower[#fp.ragLower + 1] = c end
+                end
                 fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
-                log("ragfire: lit attempt " .. attempt .. " (" .. nsPath:match("([^/]+)$") .. ")")
+                log(string.format("ragfire: lit attempt %d (%s + tip %s)", attempt,
+                    nsPath:match("([^/]+)$"), tipPath and tipPath:match("([^/]+)$") or "none"))
             end)
             if not ok then log("ragfire ERR: " .. tostring(err)) end
             if not (fp.rag and fp.rag:IsValid()) and attempt < 5 then ragFire(anim, attempt + 1) end
@@ -1139,7 +1170,15 @@ douseRagFire = function(why)
                 fp.rag:K2_DestroyComponent(fp.rag)
             end
         end)
-        fp.rag = nil
+        for _, c in ipairs(fp.ragLower or {}) do
+            pcall(function()
+                if c:IsValid() then
+                    c:Deactivate()
+                    c:K2_DestroyComponent(c)
+                end
+            end)
+        end
+        fp.rag, fp.ragLower = nil, nil
         log("ragfire: doused (" .. tostring(why) .. ")")
     end)
 end
@@ -1346,10 +1385,27 @@ end
 local function mpHook()
     if mp.hooked then return end
     mp.hooked = pcall(function()
-        RegisterHook(HUD_TICK_HOOK, function() pcall(mpTick) end)
+        RegisterHook(HUD_TICK_HOOK, function()
+            if not mp.alive then
+                mp.alive = true
+                log("mp: HUD tick alive")   -- registration success is NOT proof it fires
+            end
+            pcall(mpTick)
+        end)
     end)
     log("mp: montage probe " .. (mp.hooked and ("armed, mode " .. MP_MODE) or "hook FAILED"))
 end
+
+-- fallback driver: the 2026-10-26 patch killed the stat-panel Tick (hook "armed"
+-- but never fired — pin-pull returned silently). Poll at hover-mirror cadence
+-- while the bottle is lit; mpWatch's montage-name latch makes double-driving
+-- idempotent if the HUD hook ever comes back.
+LoopAsync(60, function()
+    if fp.rag then
+        ExecuteInGameThread(function() pcall(mpTick) end)
+    end
+    return false
+end)
 
 -- plain-data intents only: UObject work from a keybind races the per-frame hook
 local MP_MODES = { "off", "jump", "warp" }
@@ -1723,7 +1779,37 @@ end
 -- rows during population — a spawned row's click/hover events never dispatch
 -- (probe-proven: three clicks, zero hook hits) and Lua cannot AddDynamic. So we
 -- own the click: row:IsHovered() (callable native UFunction) + an LMB keybind.
-local menuCraft = { entry = nil, busy = false }
+local menuCraft = { entry = nil, busy = false, hovered = false }
+
+-- The craft's quest nodes each fire a Received/Lost banner, and the queue drips
+-- them out for ~10s. No cfg switch exists (quest prototypes carry only
+-- LocalQuest; ItemRemove nodes have no silent flag).
+-- DISABLED 2026-11-02: calling HideNotificationMain/TryShowNextNotify from a
+-- 200ms loop AV'd in native code (null + 0x2e9) the first time a craft ran
+-- while banners animated — pcall cannot catch native AVs. Do NOT re-enable
+-- until the calls are probed one-by-one from the console against a live
+-- banner. Until then the parade marches on.
+local QUIET_BANNERS = false
+local quietUntil = 0
+local function quietBanners(seconds)
+    if not QUIET_BANNERS then return end
+    quietUntil = os.clock() + seconds
+    LoopAsync(200, function()
+        if os.clock() >= quietUntil then return true end
+        ExecuteInGameThread(function()
+            pcall(function()
+                for _, nw in ipairs(FindAllOf("NotificationWidget") or {}) do
+                    if nw:IsValid() and not nw:GetFullName():find("Default__") then
+                        pcall(function() nw:HideNotificationMain() end)
+                        pcall(function() nw:HideNotificationSecondary() end)
+                        pcall(function() nw:TryShowNextNotify() end)
+                    end
+                end
+            end)
+        end)
+        return false
+    end)
+end
 
 local function playerCounts()
     local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
@@ -1746,31 +1832,32 @@ local function injectCraftEntry(menu)
     local wbl = StaticFindObject("/Script/UMG.Default__WidgetBlueprintLibrary")
     local w = wbl:Create(menu, itemClass, nil)
     if not (w and w:IsValid()) then return end
-    pcall(function() w.Label:SetText(FText("Make Molotov")) end)
-    -- match native row text color (a fresh row defaults to white)
-    pcall(function()
-        local src
-        for _, c in ipairs(box:GetAllChildren()) do
-            local vis = false
-            pcall(function() vis = c:IsVisible() end)
-            if vis then src = c break end
-        end
-        if src then
-            for _, p in ipairs({ "TextColorUnhovered", "TextColorHovered" }) do
-                pcall(function()
-                    local s, d = src[p], w[p]
-                    d.SpecifiedColor.R = s.SpecifiedColor.R
-                    d.SpecifiedColor.G = s.SpecifiedColor.G
-                    d.SpecifiedColor.B = s.SpecifiedColor.B
-                    d.SpecifiedColor.A = s.SpecifiedColor.A
-                end)
-            end
-        end
-    end)
+    pcall(function() w.Label:SetText(FText("Craft molotov cocktail")) end)
     box:AddChild(w)
-    menuCraft.entry = w
-    log("craft: Make Molotov on the menu")
+    -- the game styles rows inside its native hover handlers (the TextColor* copy
+    -- did nothing: class defaults already match) — they're plain UFunctions, so
+    -- drive them ourselves: settle into unhovered now, mirror IsHovered() after
+    pcall(function() w:OnButtonUnHovered() end)
+    menuCraft.entry, menuCraft.hovered = w, false
+    log("craft: Molotov on the menu")
 end
+
+-- hover mirror: native rows get this from their bound delegates; ours is unbound
+LoopAsync(60, function()
+    if not menuCraft.entry then return false end
+    ExecuteInGameThread(function()
+        pcall(function()
+            local e = menuCraft.entry
+            if not (e and e:IsValid()) then menuCraft.entry = nil return end
+            local hov = e:IsHovered()
+            if hov ~= menuCraft.hovered then
+                menuCraft.hovered = hov
+                if hov then e:OnButtonHovered() else e:OnButtonUnHovered() end
+            end
+        end)
+    end)
+    return false
+end)
 
 NotifyOnNewObject("/Game/GameLite/FPS_Game/UIRemaster/Inventory/W_RightClickMenu.W_RightClickMenu_C", function(menu)
     menuCraft.entry = nil   -- stale row from a menu closed without a click
@@ -1808,6 +1895,7 @@ RegisterKeyBind(Key.LEFT_MOUSE_BUTTON, function()
             menuCraft.busy = true
             log("craft: Make Molotov clicked")
             hideMenu()
+            quietBanners(12)
             -- fire the removals directly: the If gate adds a hop and does not gate anyway
             craftFire("menu", "MolotovCraft_TakeVodka", function()
                 menuCraft.busy = false

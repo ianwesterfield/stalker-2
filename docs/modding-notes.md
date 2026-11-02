@@ -180,6 +180,11 @@ cooks (stale pak cache).
   6. Even pcall'd per-frame UObject reads (montage pos/rate polling) AV under churn —
      2026-10-25 molotov-spam dumps: `EXCEPTION_ACCESS_VIOLATION reading 0xffffffffffffffff`
      inside UE4SS Lua dispatch. Poll only while a mode actually needs the values.
+  7. Driving UI state machines out-of-band is a native-AV lottery: calling
+     `NotificationWidget:HideNotificationMain/TryShowNextNotify` from a timer while a
+     banner animated crashed at null+0x2e9 (2026-11-02). Calling a widget's own hover
+     handlers (`OnButtonHovered/UnHovered`) on an injected row is fine — they only touch
+     the row's own visuals. Probe state-machine verbs interactively before scripting them.
 - Player damage feedback is keyed engine-side to the damage **event**, not to the effect
   prototype. Burn pulls the fire roar + `BurnDamageEffectProcessor` red screen edges; re-typing
   to Strike merely swaps in that type's feedback (hit vignette plus a pain grunt that reads as

@@ -205,9 +205,11 @@ for i in range(1, lip_steps + 1):  # clear the glass rim with headroom
 diag_z = 0.025  # kept: shells cut above this; fire starts past the lip arc
 
 
-# below the lip the cloth falls plumb, lands on the glass where it widens, and
-# never re-enters where it narrows: radial = running max of the glass profile
-# (cloth length is budgeted along the drape path, not z)
+# below the lip the cloth is a STRAIGHT strip: one constant-angle line from the
+# lip exit, tilted just enough that it clears the widest glass (shoulder) on the
+# way down. The old glass-following walker baked the shoulder bend into the
+# geometry — with the bone-chain ragdoll the drape is physics' job now, and a
+# baked bend read as a kink halfway down the swinging rag.
 def glass_r(z):
     if z <= lo.z:
         return prof[0]
@@ -217,31 +219,37 @@ def glass_r(z):
 standoff = 0.0035
 n_hang = 30
 seg = hang_len / n_hang
-z_cur = top_z + 0.002
-run_gr = max(lip_r - 0.003, 0.008)
-r_prev = lip_r
-arc_len, next_row, z_step = 0.0, seg, 0.0015
-plumb_z = None  # where the drape clears the shoulder and hangs straight
-while arc_len < hang_len:
-    z_nxt = z_cur - z_step
-    run_gr = max(run_gr, glass_r(z_nxt))
-    if plumb_z is None and run_gr >= max_r - 1e-5:
-        plumb_z = z_nxt
-    r_nxt = run_gr + standoff
-    arc_len += math.hypot(z_step, r_nxt - r_prev)
-    if arc_len >= next_row:
-        hw = 0.012 + (rag_w / 2 - 0.012) * min(1.0, arc_len / 0.04)
-        rows.append((Vector((cx, cy, z_nxt)) + radial_v * r_nxt, hw, False))
-        next_row += seg
-    z_cur, r_prev = z_nxt, r_nxt
-if plumb_z is None:
-    plumb_z = top_z - 0.05
+hang_origin = Vector((cx, cy, top_z + 0.002)) + radial_v * lip_r
+# steepest outward tilt required to clear the running-max glass radius. The
+# first 2cm get a pass — the lip-arc rows cover them and the neck is narrower
+# than the lip there anyway — otherwise the standoff term divided by a
+# millimetre of drop demands a near-horizontal line (tilt blew up to 2.33 and
+# the "hanging" rag ran sideways).
+GRACE = 0.020
+tilt = 0.0
+z_probe, r_run = hang_origin.z, lip_r
+while z_probe > lo.z - 0.02:
+    z_probe -= 0.0015
+    r_run = max(r_run, glass_r(z_probe))
+    drop = hang_origin.z - z_probe
+    need = (r_run + standoff) - lip_r
+    if need > 0 and drop >= GRACE:
+        tilt = max(tilt, need / drop)
+tilt = min(tilt, 0.45)
+hang_dir = (radial_v * tilt + Vector((0, 0, -1))).normalized()
+plumb_z = hang_origin.z  # droop/color ramp starts where the straight fall does
+print(
+    f"TRACE hang line: tilt={tilt:.3f} dir=({hang_dir.x:.3f},{hang_dir.y:.3f},{hang_dir.z:.3f})"
+)
+for i in range(1, n_hang + 1):
+    arc_len = i * seg
+    hw = 0.012 + (rag_w / 2 - 0.012) * min(1.0, arc_len / 0.04)
+    rows.append((hang_origin + hang_dir * arc_len, hw, False))
 
 cols = 15
-# drape character, all scaled by hang fraction so the pin stays put:
-CUP = 0.004  # edges curl back toward the glass (cloth cups)
+# drape character: texture-scale folds only — macro bends (cup, sway) belong to
+# the physics chain now, baking them in fought the sim
 RIPPLE = 0.0032  # wavy folds, distributed up the sheet
-SWAY = 0.004  # sheet drifts sideways as it falls
 CORNER = 0.003  # hem corners sag below the center
 mesh = bpy.data.meshes.new("rag_tail")
 verts, faces = [], []
@@ -250,13 +258,11 @@ for c, hw, _ in rows:
     for k in range(cols):
         s = k / (cols - 1) * 2 - 1
         r_off = (
-            -CUP * s * s
-            + RIPPLE * math.sin(s * 2.5 * math.pi + 0.6)
+            RIPPLE * math.sin(s * 2.5 * math.pi + 0.6)
             + 0.0015 * math.sin(9.0 * c.z / hang_len) * math.sin(3.1 * s + 1.7)
         ) * g
-        t_off = SWAY * g * g
         z_off = -CORNER * s * s * g * g
-        p = c + tangent_v * (hw * s + t_off) + radial_v * r_off
+        p = c + tangent_v * (hw * s) + radial_v * r_off
         verts.append((p.x, p.y, p.z + z_off))
 for i in range(len(rows) - 1):
     for k in range(cols - 1):
@@ -465,32 +471,66 @@ for part in [bottle, plug] + flame_parts:
         for d in ca.data:
             d.color = (0.0, 1.0, 0.0, 1.0)
 
-# --- phys helpers: two sub-pixel triangles weighted to jnt_fuse ---
+# --- phys helpers: two sub-pixel triangles per CHAIN BONE ---
 # UE's physics generator culls bones whose dominant-vert cloud half-diagonal
 # is under MinBoneSize (20cm, not settable via python) and merges their verts
-# into the parent; the rag cloud is ~11cm. These stretch the cloud past the
-# filter, symmetric about the mesh bounds center so the FP mid-body grip
-# solve (GetLocalBounds center) is unmoved. Stripped from the SM twin.
+# into the parent; each chain link's cloud is ~4cm. One helper pair per link
+# stretches every link's cloud past the filter, all at the same two points —
+# symmetric about the mesh bounds center so the FP mid-body grip solve
+# (GetLocalBounds center) is unmoved. Stripped from the SM twin.
+CHAIN = ["jnt_fuse", "jnt_fuse_01", "jnt_fuse_02", "jnt_fuse_03", "jnt_fuse_04"]
+HANG_LINKS = len(CHAIN) - 1  # jnt_fuse itself anchors the pin+lip, barely swings
 helper_parts = []
-for hi, hz in enumerate((0.429, -0.091)):  # bounds center 0.169 +/- 0.26
-    hme = bpy.data.meshes.new(f"phys_helper_{hi}")
-    e = 0.00005
-    hme.from_pydata([(cx, cy, hz), (cx + e, cy, hz), (cx, cy + e, hz)], [], [(0, 1, 2)])
-    hme.materials.append(bottle.data.materials[0])
-    hob = bpy.data.objects.new(f"phys_helper_{hi}", hme)
-    bpy.context.collection.objects.link(hob)
-    for gname in ("jnt_fuse", "phys_helper"):
-        g = hob.vertex_groups.new(name=gname)
-        g.add((0, 1, 2), 1.0, "REPLACE")
-    helper_parts.append(hob)
+for ci, cname in enumerate(CHAIN):
+    for hi, hz in enumerate((0.429, -0.091)):  # bounds center 0.169 +/- 0.26
+        hme = bpy.data.meshes.new(f"phys_helper_{ci}_{hi}")
+        e = 0.00005
+        hme.from_pydata(
+            [(cx, cy, hz), (cx + e, cy, hz), (cx, cy + e, hz)], [], [(0, 1, 2)]
+        )
+        hme.materials.append(bottle.data.materials[0])
+        hob = bpy.data.objects.new(f"phys_helper_{ci}_{hi}", hme)
+        bpy.context.collection.objects.link(hob)
+        for gname in (cname, "phys_helper"):
+            g = hob.vertex_groups.new(name=gname)
+            g.add((0, 1, 2), 1.0, "REPLACE")
+        helper_parts.append(hob)
 
 # --- join rag + flame into bottle ---
-# tag the fuse-riding parts BEFORE the join (groups merge by name): the rag
-# drape and its fire shells skin to jnt_fuse so a future physics body can
-# swing them; plug, cap flames, and glass stay rigid on jnt_offset
+# chain weights BEFORE the join (groups merge by name): hang distance along the
+# straight line picks the two nearest links and blends them — the tail (even
+# solidified/beveled: weights are by position) and its fire shells land on the
+# SAME bones, so the flame swings with the cloth by construction. Pin and lip
+# verts (t <= 0) stay fully on jnt_fuse; plug, cap flames, glass stay rigid on
+# jnt_offset via the free-vert pass below.
+link_len = hang_len / HANG_LINKS
+
+
+def assign_chain_weights(part):
+    groups = {}
+    for name in CHAIN:
+        groups[name] = part.vertex_groups.get(name) or part.vertex_groups.new(name=name)
+    # bone midpoints in link units: jnt_fuse anchors at 0, link k centers at k-0.5
+    mids = [0.0] + [k + 0.5 for k in range(HANG_LINKS)]
+    for v in part.data.vertices:
+        t = (Vector(v.co) - hang_origin).dot(hang_dir)
+        if t <= 0:
+            groups[CHAIN[0]].add((v.index,), 1.0, "REPLACE")
+            continue
+        bc = t / link_len
+        hi = len(mids) - 1
+        for m in range(1, len(mids)):
+            if bc <= mids[m]:
+                hi = m
+                break
+        lo_m = hi - 1
+        f = min(1.0, max(0.0, (bc - mids[lo_m]) / max(mids[hi] - mids[lo_m], 1e-6)))
+        groups[CHAIN[hi]].add((v.index,), f, "REPLACE")
+        groups[CHAIN[lo_m]].add((v.index,), 1.0 - f, "REPLACE")
+
+
 for part in [tail] + [p for p in flame_parts if p.name.startswith("sheath_")]:
-    fvg = part.vertex_groups.new(name="jnt_fuse")
-    fvg.add(range(len(part.data.vertices)), 1.0, "REPLACE")
+    assign_chain_weights(part)
 bpy.ops.object.select_all(action="DESELECT")
 bottle.select_set(True)
 for part in rag_parts + flame_parts + helper_parts:
@@ -520,32 +560,38 @@ for poly in bottle.data.polygons:
         assert n[2] > 0.99, "flame-axis custom normals lost"
         break
 
-# --- fuse joint: child bone at the mouth so the rag can swing as a unit
-# (reusable anchor for any future fused object) ---
+# --- fuse chain: root at the mouth, then evenly spaced links down the straight
+# hang line. Each non-leaf bone's length comes from its child joint (FBX drops
+# leaf tails), and the per-link helper clouds beat the MinBoneSize filter, so
+# every link earns a physics body. ---
 bpy.ops.object.select_all(action="DESELECT")
 armature.select_set(True)
 bpy.context.view_layer.objects.active = armature
 bpy.ops.object.mode_set(mode="EDIT")
-eb = armature.data.edit_bones.new("jnt_fuse")
-eb.head = (cx, cy, top_z)
-eb.tail = (cx, cy, top_z - 0.22)
-eb.parent = armature.data.edit_bones["jnt_offset"]
-# FBX drops leaf-bone tails (re-imports at default length) and UE measures
-# bone length by CHILD JOINT distance — without this end joint the physics
-# generator's MinBoneSize (20cm) filter skips jnt_fuse. No weights on it.
+chain_heads = [Vector((cx, cy, top_z))]
+for i in range(HANG_LINKS):
+    chain_heads.append(hang_origin + hang_dir * (i * link_len))
+chain_heads.append(hang_origin + hang_dir * (HANG_LINKS * link_len))
+parent_eb = armature.data.edit_bones["jnt_offset"]
+for ci, cname in enumerate(CHAIN):
+    eb = armature.data.edit_bones.new(cname)
+    eb.head = chain_heads[ci]
+    eb.tail = chain_heads[ci + 1]
+    eb.parent = parent_eb
+    parent_eb = eb
+# FBX drops leaf-bone tails; the end joint gives the last link a measured length
 ee = armature.data.edit_bones.new("jnt_fuse_end")
-ee.head = (cx, cy, top_z - 0.22)
-ee.tail = (cx, cy, top_z - 0.25)
-ee.parent = eb
+ee.head = chain_heads[-1]
+ee.tail = chain_heads[-1] + hang_dir * 0.03
+ee.parent = parent_eb
 bpy.ops.object.mode_set(mode="OBJECT")
 
-# --- rigid skin: fuse-tagged verts to jnt_fuse, everything else jnt_offset ---
-fuse_vg = bottle.vertex_groups.get("jnt_fuse")
-fuse_idx = fuse_vg.index if fuse_vg else -1
+# --- rigid skin: chain-weighted verts keep their blend, everything else jnt_offset ---
+chain_idx = {part_vg.index for part_vg in bottle.vertex_groups if part_vg.name in CHAIN}
 free = [
     v.index
     for v in bottle.data.vertices
-    if not any(g.group == fuse_idx for g in v.groups)
+    if not any(g.group in chain_idx and g.weight > 0 for g in v.groups)
 ]
 vg = bottle.vertex_groups.new(name="jnt_offset")
 vg.add(free, 1.0, "REPLACE")
