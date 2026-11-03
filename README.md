@@ -6,6 +6,7 @@ Two projects live here:
 | -------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | **Molotov Cocktail** | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                 | Playable, iterating on polish |
 | **ZoneLink**         | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental)) | Tier A ghost verified         |
+| **ZoneXM**           | Conversation awareness for your own music — ducks Windows audio when the Zone demands attention ([details](#zonexm--conversation-awareness-for-external-music)) | Working: gunfire, mutants, dialogue |
 
 ## Molotov Cocktail
 
@@ -199,3 +200,65 @@ lands; for now it rides along here.
 - Escort stations are placeholder motion; real peer data replaces them in Tier B.
 - Damage/death, weapon-swap mirroring, A-Life/weather sync all deferred (see the phase table
   in the design doc).
+
+---
+
+## ZoneXM — conversation awareness for external music
+
+*"Many stalkers were hurt in the making of this modification... of course."*
+
+Play your own music over the game; ZoneXM ducks it — every app except the game, each to a
+fraction of its own volume — whenever the Zone needs your ears, and fades it back when the
+dust settles. Two cooperating halves joined by a flag file:
+
+| Half     | Lives in                                                               | Does                                                                                                        |
+| -------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Sensor   | [ue4ss-mods/ZoneXM/](ue4ss-mods/ZoneXM/) (UE4SS Lua)                   | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM\alert.flag` alive while it lasts |
+| Watchdog | [tools/zonexm-watchdog.ps1](tools/zonexm-watchdog.ps1) (PowerShell 7+) | Polls the flag, ducks per-app CoreAudio session volumes, tray icon shows armed/ducked, restores exactly     |
+
+Sensor tiers (each refreshes a timestamp; the flag stays hot while any window is open):
+
+| Tier     | Trigger                             | Mechanism                                                | Tail |
+| -------- | ----------------------------------- | --------------------------------------------------------- | ---- |
+| Gunfire  | any shot near Skif (player or NPC)  | `ItemAppearanceComponent:OnShotSoundStart` hook (proven)  | 6s   |
+| Beasts   | live mutant within 35 m             | `FindAllOf("AnimInstanceMutant")` radar sweep, `IsAlive`-filtered | 3s, self-refreshing |
+| Speech   | anyone talking (dialog, bark, cutscene) | `SubtitleView` visibility poll — needs subtitles ON    | 2.5s |
+| Melee    | mutant lunge                        | `Obj:OnMeleeAttack_BP` battery (candidates under test)    | 3s   |
+
+The watchdog fades instead of stepping: smoothstep dip over 350 ms (combat is urgent),
+rise over 1.5 s (recovery is musical). Per-session baselines mean every app returns to
+exactly its pre-duck volume — including apps that started mid-fight. Single-instance
+mutex; stale flag (> 8 s) = dead game = restore.
+
+```powershell
+.\scripts\deploy-ue4ss.ps1 -Mods ZoneXM -SkipSignatures   # sensor → game
+.\tools\zonexm-watchdog.ps1                               # duck ALL except the game (default)
+.\tools\zonexm-watchdog.ps1 -ProcessName Pandora,msedge   # narrow mode
+.\tools\zonexm-watchdog.ps1 -DuckLevel 0.15 -DuckFadeMs 350 -RestoreFadeMs 1500
+```
+
+Hard-won findings baked into the build:
+
+- **Almost nothing crosses the script VM.** Of 9 damage/shot UFunction candidates
+  (`ReceiveDamage`, `OnDamageReceived_BP`, `OnShot_BP`, `OnShootingStarted_BP`,
+  `OnFirePressed[_BP]`, `Shoot`, two voice notifies), exactly **one** dispatches where Lua
+  can see it: `OnShotSoundStart`. A `_BP` suffix is no guarantee — demand proof-of-life
+  logging inside the callback before trusting any hook.
+- **Never hook per-contact physics events on character base classes** (`Obj:OnHit` pegged
+  the game thread and froze input). Shot/attack notifies are rate-bounded; contacts aren't.
+- **No `os.execute` at mod load** — the console flash steals the game's mouse capture
+  (stuck until a menu toggle). The watchdog owns directory creation.
+- **Combat state has no reflected property.** The compass threat indicator, agent aggro,
+  and Wwise combat music are all native-only; proximity + sound events are the signals
+  that actually exist.
+- **Raw-vtable CoreAudio.** `ComImport` interface casts fail as managed `InvalidCast` on
+  modern PowerShell before QI is ever attempted; delegate-per-vtable-slot works everywhere.
+- The watchdog is game-agnostic: anything that writes/heartbeats the flag file can drive it.
+
+## Known limitations / next ideas (ZoneXM)
+
+- Speech tier requires subtitles enabled in game settings (it watches `SubtitleView`).
+- Tray glyph is the molotov bottle; a proper PDA icon awaits extraction.
+- Anomalies, emissions, and gravity whooshes don't duck yet — no sound-event hook found
+  for them so far; the beast radar covers the creatures that ride them.
+- Melee battery (`OnMeleeAttack_BP`, `MakeAttack_BP`) still awaiting a confirmed live fire.
