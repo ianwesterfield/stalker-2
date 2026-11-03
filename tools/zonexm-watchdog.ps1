@@ -18,7 +18,9 @@ param(
   [string[]]$AllButProcess = @("Stalker2-Win64-Shipping"),    # otherwise: duck all but these
   [double]$DuckLevel = 0.15,                # fraction of pre-duck volume
   [int]$PollMs = 500,
-  [int]$StaleAfterSec = 8                   # flag older than this = game died
+  [int]$StaleAfterSec = 8,                  # flag older than this = game died
+  [int]$DuckFadeMs = 350,                   # combat is urgent: fast dip
+  [int]$RestoreFadeMs = 1500                # recovery is musical: lazy rise
 )
 $ErrorActionPreference = 'Stop'
 
@@ -161,6 +163,25 @@ function Restore-Duck {
   $script:baselines = @{}
 }
 
+# apply baseline*factor to every tracked session (factor 1.0 = untouched)
+function Set-DuckFactor([double]$f) {
+  foreach ($kv in $script:baselines.GetEnumerator()) {
+    try { [ZoneXM.Audio.Duck]::Set($kv.Value.Vol, [float]($kv.Value.Level * $f)) } catch {}
+  }
+}
+
+# smoothstep ease between duck factors; DoEvents keeps the tray alive mid-fade
+function Start-Fade([double]$from, [double]$to, [int]$ms) {
+  $steps = [math]::Max(1, [int]($ms / 33))
+  for ($i = 1; $i -le $steps; $i++) {
+    $t = $i / $steps
+    $s = $t * $t * (3 - 2 * $t)
+    Set-DuckFactor ($from + ($to - $from) * $s)
+    [System.Windows.Forms.Application]::DoEvents()
+    Start-Sleep -Milliseconds 33
+  }
+}
+
 if ($PSBoundParameters.ContainsKey('ProcessName')) {
   Write-Host "ZoneXM watchdog armed: duck [$($ProcessName -join ', ')] x$DuckLevel on alert (flag: $flag)"
 }
@@ -213,21 +234,33 @@ try {
 
     if ($alert) {
       $now = Find-TargetVolumes
+      $freshDuringDuck = @()
       foreach ($kv in $now.GetEnumerator()) {
         if (-not $script:baselines.ContainsKey($kv.Key)) {
           $current = [ZoneXM.Audio.Duck]::Get($kv.Value)
           if ($current -gt 0.001) {
             $script:baselines[$kv.Key] = @{ Vol = $kv.Value; Level = $current }
-            [ZoneXM.Audio.Duck]::Set($kv.Value, $current * $DuckLevel)
-            $script:ducked = $true
+            if ($script:ducked) { $freshDuringDuck += $kv.Value }
             $who = (Get-Process -Id $kv.Key -ErrorAction SilentlyContinue).ProcessName
-            Write-Host "$(Get-Date -Format HH:mm:ss) DUCKED $who -> $([math]::Round($current * $DuckLevel, 3))"
+            Write-Host "$(Get-Date -Format HH:mm:ss) tracking $who @ $([math]::Round($current, 3))"
           }
         }
       }
-      if ($script:ducked) { Set-TrayState 'DUCKED (combat)' }
+      if (-not $script:ducked -and $script:baselines.Count -gt 0) {
+        Set-TrayState 'DUCKED (combat)'
+        Start-Fade 1.0 $DuckLevel $DuckFadeMs
+        $script:ducked = $true
+        Write-Host "$(Get-Date -Format HH:mm:ss) ducked x$DuckLevel ($($script:baselines.Count) sessions)"
+      }
+      elseif ($script:ducked) {
+        # latecomers conform instantly; everyone else is already down
+        foreach ($v in $freshDuringDuck) {
+          try { [ZoneXM.Audio.Duck]::Set($v, [float]([ZoneXM.Audio.Duck]::Get($v) * $DuckLevel)) } catch {}
+        }
+      }
     }
     elseif (-not $alert -and $ducked) {
+      Start-Fade $DuckLevel 1.0 $RestoreFadeMs
       Restore-Duck
       $script:ducked = $false
       Set-TrayState 'armed'
