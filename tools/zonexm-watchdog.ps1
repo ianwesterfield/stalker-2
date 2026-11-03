@@ -22,7 +22,14 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
+# single instance: stacked watchdogs race baselines (three were running at one point)
+$mutexCreated = $false
+$script:mutex = New-Object System.Threading.Mutex($true, "ZoneXM.Watchdog.Singleton", [ref]$mutexCreated)
+if (-not $mutexCreated) { Write-Host "ZoneXM watchdog already running — exiting"; exit 0 }
+
 $flag = Join-Path $env:LOCALAPPDATA "Stalker2\Saved\ZoneXM\alert.flag"
+# the game-side Lua must not shell out (console flash steals game input focus) — we own the dir
+$null = New-Item -ItemType Directory -Path (Split-Path $flag) -Force
 
 try {
   Add-Type -TypeDefinition @'
@@ -161,8 +168,36 @@ else {
   Write-Host "ZoneXM watchdog armed: duck ALL except [$($AllButProcess -join ', ')] x$DuckLevel on alert (flag: $flag)"
 }
 
+# tray icon: visible proof of life, tooltip carries duck state, right-click Exit
+# restores. DoEvents in the poll loop keeps the tray responsive.
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$iconFile = Join-Path $PSScriptRoot 'zonexm.png'
+$script:tray = $null
+$script:quit = $false
+$script:trayBmp = $null
+if (Test-Path $iconFile) {
+  $script:trayBmp = [System.Drawing.Bitmap]::FromFile($iconFile)
+  $hIcon = $script:trayBmp.GetHicon()
+  $script:tray = New-Object System.Windows.Forms.NotifyIcon
+  $script:tray.Icon = [System.Drawing.Icon]::FromHandle($hIcon)
+  $script:tray.Text = 'ZoneXM: armed'
+  $cm = New-Object System.Windows.Forms.ContextMenuStrip
+  [void]$cm.Items.Add('Exit ZoneXM')
+  $cm.Items[0].add_Click({ $script:quit = $true })
+  $script:tray.ContextMenuStrip = $cm
+  $script:tray.Visible = $true
+}
+else {
+  Write-Host "tray icon missing ($iconFile) — running headless"
+}
+function Set-TrayState([string]$state) {
+  if ($script:tray) { $script:tray.Text = "ZoneXM: $state" }
+}
+
 try {
-  while ($true) {
+  while (-not $script:quit) {
+    [System.Windows.Forms.Application]::DoEvents()
     Start-Sleep -Milliseconds $PollMs
     $alert = Test-Path $flag
     if ($alert) {
@@ -190,14 +225,19 @@ try {
           }
         }
       }
+      if ($script:ducked) { Set-TrayState 'DUCKED (combat)' }
     }
     elseif (-not $alert -and $ducked) {
       Restore-Duck
       $script:ducked = $false
+      Set-TrayState 'armed'
       Write-Host "$(Get-Date -Format HH:mm:ss) restored all"
     }
   }
 }
 finally {
   Restore-Duck
+  if ($script:tray) { $script:tray.Visible = $false; $script:tray.Dispose() }
+  if ($script:trayBmp) { $script:trayBmp.Dispose() }
+  if ($script:mutex) { $script:mutex.ReleaseMutex(); $script:mutex.Dispose() }
 }
