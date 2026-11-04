@@ -11,6 +11,9 @@
 local UEHelpers = require("UEHelpers")
 local function log(msg) print("[ZoneXM] " .. msg .. "\n") end
 
+assert(type(LoopInGameThreadWithDelay) == "function",
+    "ZoneXM requires UE4SS LoopInGameThreadWithDelay")
+
 local FLAG_DIR = os.getenv("LOCALAPPDATA") .. "\\Stalker2\\Saved\\ZoneXM"
 -- no os.execute here: cmd flash at boot stole game input capture (mouse stuck till menu toggle);
 -- the watchdog creates this dir, and writeFlag just no-ops until it exists
@@ -52,12 +55,13 @@ local function armBattery(fns, onNear)
         local short = fn:match(":([^:]+)$")
         local ok, err = pcall(function()
             RegisterHook(fn, function(self)
-                pcall(function()
+                local fired = pcall(function()
+                    local who = self:get()
+                    if not (who and who:IsValid()) then return end
                     local n = (rawByFn[short] or 0) + 1
                     rawByFn[short] = n
                     if n <= 3 then log(short .. " fired raw (#" .. n .. ")") end
-                    local who = self:get()
-                    if who and nearPlayer(who) then onNear(short) end
+                    if nearPlayer(who) then onNear(short) end
                 end)
             end)
         end)
@@ -90,7 +94,7 @@ end)
 
 -- mutant radar: anything with a mutant anim instance, alive, inside the sphere
 local radarLogs = 0
-LoopAsync(BEAST_SWEEP_MS, function()
+LoopInGameThreadWithDelay(BEAST_SWEEP_MS, function()
     pcall(function()
         local pawn = UEHelpers.GetPlayerController().Pawn
         if not (pawn and pawn:IsValid()) then return end
@@ -130,7 +134,7 @@ local function writeFlag()
     if f then f:write(tostring(os.time())) f:close() end
 end
 
-LoopAsync(POLL_MS, function()
+LoopInGameThreadWithDelay(POLL_MS, function()
     local nowMs = os.time() * 1000
     -- speech tier: subtitles render whenever anyone talks (dialogs, barks,
     -- cutscenes) — requires subtitles ON in game settings. IsInStaticDialog
@@ -143,13 +147,19 @@ LoopAsync(POLL_MS, function()
             if talkCount <= 3 then log("subtitles visible: someone's talking (#" .. talkCount .. ")") end
         end
     end)
+    local pcAlive = false
     pcall(function()
         local pc = UEHelpers.GetPlayerController()
-        if pc and pc:IsValid() and pc:IsInStaticDialog() then
+        pcAlive = pc and pc:IsValid() or false
+        if pcAlive and pc:IsInStaticDialog() then
             lastTalkAt = nowMs
             if not dialogProbe then log("static dialog detected (queryable works)") dialogProbe = true end
         end
     end)
+    -- Loading / world transition: no player controller = nothing is near Skif.
+    if not pcAlive then
+        lastHitAt, lastTalkAt, lastBeastAt = 0.0, 0.0, 0.0
+    end
     -- lastHitAt's window IS the holdoff (the old two-layer version doubled it)
     local hot = (lastHitAt > 0 and (nowMs - lastHitAt) < HOLDOFF_MS)
         or (lastTalkAt > 0 and (nowMs - lastTalkAt) < TALK_HOLDOFF_MS)
