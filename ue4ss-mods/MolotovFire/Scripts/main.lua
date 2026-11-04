@@ -4,6 +4,28 @@ log("loaded")
 
 local UEHelpers = require("UEHelpers")
 
+assert(type(LoopInGameThreadWithDelay) == "function"
+    and type(ExecuteInGameThreadWithDelay) == "function"
+    and type(CancelDelayedAction) == "function",
+    "MolotovFire requires UE4SS game-thread timer APIs")
+
+local equipGeneration = 0
+local mp = { cur = {}, bones = {}, freeze = false, step = 0, hooked = false }
+
+local function regAddr(o)
+    local ok, a = pcall(function() return o:GetAddress() end)
+    return (ok and type(a) == "number") and a or nil
+end
+local function objAlive(o)
+    local ok, r = pcall(function() return o and o:IsValid() end)
+    return ok and r == true
+end
+local function findByAddr(className, addr)
+    for _, o in ipairs(FindAllOf(className) or {}) do
+        if regAddr(o) == addr then return o end
+    end
+end
+
 -- Ambient bonfire BP (env set-dressing): self-contained VFX+light, no anomaly-spawner
 -- context needed. ClassicFireAnomaly null-derefs when raw-spawned — don't go back.
 local FIRE_CLASS_PATH = "/Game/_Stalker_2/VFX/Environment/BonFire/Blueprint/BP_BonFire.BP_BonFire_C"
@@ -102,7 +124,7 @@ local function spawnGroundFire(x, y, z, hx, hy)
                             logs:SetCollisionEnabled(0)
                         end
                     end)
-                    fires[#fires + 1] = { actor = actor, dieAt = os.clock() + life }
+                    fires[#fires + 1] = { actor = actor, addr = regAddr(actor), dieAt = os.clock() + life }
                     spawned = spawned + 1
                 end
             end)
@@ -115,15 +137,15 @@ end
 local refreshPoolBurns   -- fwd: assigned beside igniteNearby below
 
 -- Extinguish expired fires; while any burn, keep NPCs standing in the pool alight.
-LoopAsync(1000, function()
+LoopInGameThreadWithDelay(1000, function()
     if #fires == 0 then return false end
     ExecuteInGameThread(function()
         for i = #fires, 1, -1 do
             local f = fires[i]
-            if os.clock() >= f.dieAt then
-                pcall(function()
-                    if f.actor:IsValid() then f.actor:K2_DestroyActor() end
-                end)
+            if os.clock() >= f.dieAt or not objAlive(f.actor) then
+                if objAlive(f.actor) then
+                    pcall(function() f.actor:K2_DestroyActor() end)
+                end
                 table.remove(fires, i)
             end
         end
@@ -198,12 +220,12 @@ local poolLogAt = 0
 refreshPoolBurns = function()
     local pts = {}
     for _, f in ipairs(fires) do
-        pcall(function()
-            if f.actor and f.actor:IsValid() then
+        if objAlive(f.actor) then
+            pcall(function()
                 local l = f.actor:K2_GetActorLocation()
                 pts[#pts + 1] = { x = l.X, y = l.Y, z = l.Z, r = POOL_BURN_RADIUS }
-            end
-        end)
+            end)
+        end
     end
     if #pts == 0 then return end
     local now = os.clock()
@@ -212,15 +234,18 @@ refreshPoolBurns = function()
     burnNPCsNear(pts, tag)
 end
 
-local function detonate(t, grenade, x, y, z, how)
+-- (unused) kept for the seen-sets only
+
+local function detonate(t, x, y, z, how)
     if t.detonated then return end
     t.detonated = true
     if t.alive then
         t.alive = false
         trackedCount = trackedCount - 1
     end
+    local g = objAlive(t.actor) and t.actor or nil
     pcall(function()
-        if grenade and grenade:IsValid() then grenade:Explode() end
+        if g and g:IsValid() then g:Explode() end
     end)
     log(string.format("BOOM (%s) at %.0f %.0f %.0f", how, x, y, z))
     local okF, errF = pcall(spawnGroundFire, x, y, z, t.hx, t.hy)
@@ -237,9 +262,11 @@ local okHit, errHit = pcall(function()
         pcall(function()
             if trackedCount == 0 then return end
             local g = selfParam:get()
+            local gaddr = regAddr(g)
+            if not gaddr then return end
             for _, t in ipairs(tracked) do
                 if t.alive and t.armed and not t.detonated and not t.hitPending
-                        and sameObj(t.actor, g) then
+                        and t.addr == gaddr then
                     t.hitPending = true
                     return
                 end
@@ -281,7 +308,7 @@ local function tuneFlightLook(grenade, attempt)
     ExecuteInGameThread(function()
         local done = false
         pcall(function()
-            if not (grenade and grenade:IsValid()) then done = true return end
+            if not objAlive(grenade) then done = true return end
             local sid
             pcall(function()
                 local v = grenade.SID
@@ -325,94 +352,101 @@ local function tuneFlightLook(grenade, attempt)
             -- rag materials not on the comp yet (cfg mesh still initializing) -> retry
         end)
         if not done and attempt < 12 then
-            ExecuteWithDelay(50, function() tuneFlightLook(grenade, attempt + 1) end)
+            ExecuteInGameThreadWithDelay(50, function() tuneFlightLook(grenade, attempt + 1) end)
         end
     end)
 end
 
 local douseRagFire   -- fwd decl: fp lives below; assigned beside ragFire
 
-NotifyOnNewObject("/Game/GameLite/Blueprints/Grenades/BP_grenade.BP_Grenade_C", function(grenade)
-    tracked[#tracked + 1] = { actor = grenade, x = 0, y = 0, z = 0, alive = true, seen = 0 }
-    trackedCount = trackedCount + 1
-    log("grenade spawned (equipped)")
-    -- the hand fire must not ride the arm after the bottle flies
-    if douseRagFire then douseRagFire("thrown") end
-    ExecuteWithDelay(16, function() tuneFlightLook(grenade, 1) end)
-    -- dump: BP_Grenade_C has exactly one StaticMeshComponent, no skeletal
-    ExecuteWithDelay(300, function()
-        ExecuteInGameThread(function()
-            local ok, err = pcall(function()
-                if not (grenade and grenade:IsValid()) then log("bottleize: actor gone") return end
-                -- gate: native Grenade.SID (dump: plain StrProperty) names the prototype
-                local sid = "unreadable"
-                pcall(function()
-                    local v = grenade.SID
-                    local s = tostring(v and v.ToString and v:ToString() or v)
-                    if s ~= "" and s ~= "nil" then sid = s end
-                end)
-                log("bottleize: SID = " .. sid)
-                if not (sid:find("Molotov") or sid == "unreadable") then
-                    log("bottleize: not a molotov, skipping")
-                    for _, t in ipairs(tracked) do
-                        if t.alive and rawequal(t.actor, grenade) then
-                            t.alive = false
-                            trackedCount = trackedCount - 1
-                            log("untracked non-molotov (no fire for RGD5/F1)")
-                        end
+local grenSeen = {}
+LoopInGameThreadWithDelay(60, function()
+    ExecuteInGameThread(function()
+        pcall(function()
+            for _, grenade in ipairs(FindAllOf("BP_Grenade_C") or {}) do
+                if grenade:IsValid() and not grenade:GetFullName():find("Default__") then
+                    local gaddr = regAddr(grenade)
+                    if gaddr and not grenSeen[gaddr] then
+                        grenSeen[gaddr] = true
+                        tracked[#tracked + 1] = { addr = gaddr, actor = grenade, x = 0, y = 0, z = 0, alive = true, seen = 0 }
+                        trackedCount = trackedCount + 1
+                        log("grenade spawned (equipped)")
+                        if douseRagFire then douseRagFire("thrown") end
+                        ExecuteInGameThreadWithDelay(16, function() tuneFlightLook(grenade, 1) end)
+                        ExecuteInGameThreadWithDelay(300, function()
+                            ExecuteInGameThread(function()
+                                local ok, err = pcall(function()
+                                    if not objAlive(grenade) then log("bottleize: actor gone") return end
+                                    local g = grenade
+                                    local sid = "unreadable"
+                                    pcall(function()
+                                        local v = g.SID
+                                        local s = tostring(v and v.ToString and v:ToString() or v)
+                                        if s ~= "" and s ~= "nil" then sid = s end
+                                    end)
+                                    log("bottleize: SID = " .. sid)
+                                    if not (sid:find("Molotov") or sid == "unreadable") then
+                                        log("bottleize: not a molotov, skipping")
+                                        for _, t in ipairs(tracked) do
+                                            if t.alive and t.addr == gaddr then
+                                                t.alive = false
+                                                trackedCount = trackedCount - 1
+                                                log("untracked non-molotov (no fire for RGD5/F1)")
+                                            end
+                                        end
+                                        return
+                                    end
+                                    log("bottleize: cfg mesh in use")
+                                end)
+                                if not ok then log("bottleize ERR: " .. tostring(err)) end
+                            end)
+                        end)
                     end
-                    return
                 end
-                -- mesh swap retired: cfg MeshInWorldPrototypeSID ships the bottle; a
-                -- runtime SetStaticMesh rebuilt the physics body mid-flight and froze it
-                log("bottleize: cfg mesh in use")
-                -- flight look applied by tuneFlightLook from frame 1 (not here: quick
-                -- throws land before this 300ms delay fires)
-                -- NO live component sweeps here: FindAllOf over world mesh comps
-                -- caused a native AV (uncatchable). FP-hands hunt moved to offline dumps.
-            end)
-            if not ok then log("bottleize ERR: " .. tostring(err)) end
+            end
         end)
     end)
+    return false
 end)
 
-LoopAsync(100, function()
+LoopInGameThreadWithDelay(100, function()
     if trackedCount == 0 then return false end
     ExecuteInGameThread(function()
         for _, t in ipairs(tracked) do
             if t.alive then
                 local ok = pcall(function()
+                    local g = objAlive(t.actor) and t.actor or nil
                     -- deferred impact: flagged by the OnHit hook, executed here
                     if t.hitPending and not t.detonated then
                         t.hitPending = nil
                         local sid, px, py, pz = "", t.x, t.y, t.z
-                        if t.actor:IsValid() then
+                        if g then
                             pcall(function()
-                                local v = t.actor.SID
+                                local v = g.SID
                                 sid = tostring(v and v.ToString and v:ToString() or v)
                             end)
                             pcall(function()   -- resting spot = true ground zero
-                                local loc = t.actor:K2_GetActorLocation()
+                                local loc = g:K2_GetActorLocation()
                                 if not (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
                                     px, py, pz = loc.X, loc.Y, loc.Z
                                 end
                             end)
                         end
                         if sid:find("Molotov") then
-                            detonate(t, t.actor, px, py, pz, "impact")
+                            detonate(t, px, py, pz, "impact")
                             return
                         end
                         -- non-molotov slipped in pre-bottleize: engine timer keeps it
                     end
                     -- fallback fuse: soft landings (water/bushes) may never fire OnHit
                     if t.armed and os.clock() >= t.boomAt then
-                        detonate(t, t.actor, t.x, t.y, t.z, "fuse fallback")
+                        detonate(t, t.x, t.y, t.z, "fuse fallback")
                         return
                     end
-                    if t.actor:IsValid() then
-                        local loc = t.actor:K2_GetActorLocation()
+                    if g then
+                        local loc = g:K2_GetActorLocation()
                         if (loc.X == 0 and loc.Y == 0 and loc.Z == 0) then
-                            local root = t.actor.RootComponent
+                            local root = g.RootComponent
                             if root and root:IsValid() then
                                 loc = root:K2_GetComponentLocation()
                             end
@@ -547,22 +581,31 @@ end
 -- bobbed the bottle in step cadence while the (steady) fist barely moves.
 local GRIP_BONES = { "jnt_r_hand_middle_01", "jnt_r_hand_middle_meta" }
 
+-- Resolve the stashed FP objects. Called from the game thread only, right before
+-- use — never stash the results.
+local function fpBottle() return objAlive(fp.bottle) and fp.bottle or nil end
+local function fpMesh() return objAlive(fp.mesh) and fp.mesh or nil end
+local function fpAnchor() return objAlive(fp.anchor) and fp.anchor or nil end
+local function fpMarker() return objAlive(fp.marker) and fp.marker or nil end
+
 local function attachWrist()   -- snap back to the authoring frame (zero relative)
-    fp.bottle:K2_AttachToComponent(fp.anchor, FName(fp.boneName or "None"), 2, 2, 0, false)
+    local b, a = fpBottle(), fpAnchor()
+    if b and a then b:K2_AttachToComponent(a, FName(fp.boneName or "None"), 2, 2, 0, false) end
 end
 
 local function regrip()   -- KeepWorld re-attach: same world pose, short fist lever
     pcall(function()
-        if not (fp.bottle and fp.bottle:IsValid() and fp.anchor and fp.anchor:IsValid()) then return end
+        local bottle, anchor = fpBottle(), fpAnchor()
+        if not (bottle and anchor) then return end
         local grip
         for _, b in ipairs(GRIP_BONES) do
-            if fp.anchor:DoesSocketExist(FName(b)) then grip = b break end
+            if anchor:DoesSocketExist(FName(b)) then grip = b break end
         end
         if not grip then return end
-        fp.bottle:K2_AttachToComponent(fp.anchor, FName(grip), 1, 1, 1, false)
+        bottle:K2_AttachToComponent(anchor, FName(grip), 1, 1, 1, false)
         if not fp.gripLogged then
             fp.gripLogged = true
-            local rl, rr = fp.bottle.RelativeLocation, fp.bottle.RelativeRotation
+            local rl, rr = bottle.RelativeLocation, bottle.RelativeRotation
             log(string.format("FP: riding %s rel %.1f %.1f %.1f rot %.1f %.1f %.1f",
                 grip, rl.X, rl.Y, rl.Z, rr.Pitch, rr.Yaw, rr.Roll))
         end
@@ -571,8 +614,9 @@ end
 
 local function applyBottleTune()
     pcall(function()
-        if fp.bottle and fp.bottle:IsValid() then
-            if fp.anchor and fp.anchor:IsValid() then attachWrist() end
+        local bottle = fpBottle()
+        if bottle then
+            if fpAnchor() then attachWrist() end
             local bl = fp.baseLoc or { x = 0, y = 0, z = 0 }
             local br = fp.baseRot or { p = 0, yaw = 0, r = 0 }
             local rot = { Pitch = br.p + bottleOff.ry, Yaw = br.yaw + bottleOff.rz, Roll = br.r + bottleOff.rx }
@@ -587,11 +631,12 @@ local function applyBottleTune()
             local ox = (fv.X * c.x + rv.X * c.y + uv.X * c.z) * bottleOff.s
             local oy = (fv.Y * c.x + rv.Y * c.y + uv.Y * c.z) * bottleOff.s
             local oz = (fv.Z * c.x + rv.Z * c.y + uv.Z * c.z) * bottleOff.s
-            fp.bottle:SetRelativeScale3D({ X = bottleOff.s, Y = bottleOff.s, Z = bottleOff.s })
-            fp.bottle:K2_SetRelativeLocation({ X = tx - ox, Y = ty - oy, Z = tz - oz }, false, {}, false)
-            fp.bottle:K2_SetRelativeRotation(rot, false, {}, false)
-            if fp.marker and fp.marker:IsValid() then   -- marker = the grip/mid point
-                fp.marker:K2_SetRelativeLocation({ X = tx, Y = ty, Z = tz }, false, {}, false)
+            bottle:SetRelativeScale3D({ X = bottleOff.s, Y = bottleOff.s, Z = bottleOff.s })
+            bottle:K2_SetRelativeLocation({ X = tx - ox, Y = ty - oy, Z = tz - oz }, false, {}, false)
+            bottle:K2_SetRelativeRotation(rot, false, {}, false)
+            local mk = fpMarker()
+            if mk then   -- marker = the grip/mid point
+                mk:K2_SetRelativeLocation({ X = tx, Y = ty, Z = tz }, false, {}, false)
             end
             regrip()
         end
@@ -615,14 +660,15 @@ local function sampleGrenadeBase(tag, forceLive)
         return
     end
     local ok, err = pcall(function()
-        if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()) then return end
+        local bottle, mesh = fpBottle(), fpMesh()
+        if not (bottle and mesh) then return end
         attachWrist()   -- readback below must be wrist-relative (authoring frame)
-        local gl = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
-        local gr = fp.mesh:GetSocketRotation(FName("jnt_wpn_rgd5"))
-        fp.bottle:K2_SetWorldLocationAndRotation(
+        local gl = mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
+        local gr = mesh:GetSocketRotation(FName("jnt_wpn_rgd5"))
+        bottle:K2_SetWorldLocationAndRotation(
             { X = gl.X, Y = gl.Y, Z = gl.Z },
             { Pitch = gr.Pitch, Yaw = gr.Yaw, Roll = gr.Roll }, false, {}, false)
-        local rl, rr = fp.bottle.RelativeLocation, fp.bottle.RelativeRotation
+        local rl, rr = bottle.RelativeLocation, bottle.RelativeRotation
         fp.baseLoc = { x = rl.X, y = rl.Y, z = rl.Z }
         fp.baseRot = { p = rr.Pitch, yaw = rr.Yaw, r = rr.Roll }
         if tag then
@@ -640,9 +686,11 @@ end
 -- Source: HUD stat-panel widget Tick (ZoneLink-proven, fires natively every frame);
 -- the grenade AnimBP owns only AnimGraph (dump-verified) — nothing to hook there.
 local function handGrenadeDistances()
-    local g = fp.mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
+    local mesh, anchor = fpMesh(), fpAnchor()
+    if not (mesh and anchor) then return nil, nil end
+    local g = mesh:GetSocketLocation(FName("jnt_wpn_rgd5"))
     local function dist(bone)
-        local h = fp.anchor:GetSocketLocation(FName(bone))
+        local h = anchor:GetSocketLocation(FName(bone))
         local dx, dy, dz = g.X - h.X, g.Y - h.Y, g.Z - h.Z
         return math.sqrt(dx * dx + dy * dy + dz * dz)
     end
@@ -655,13 +703,14 @@ end
 -- bone — the engine turns it into a constant bone-local offset (rigid, no swim).
 local function rigWeld()
     pcall(function()
-        if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()) then return end
+        local bottle, mesh = fpBottle(), fpMesh()
+        if not (bottle and mesh) then return end
         sampleGrenadeBase(nil)
-        fp.bottle:K2_AttachToComponent(fp.mesh, FName("jnt_wpn_rgd5"), 1, 1, 1, false)
+        bottle:K2_AttachToComponent(mesh, FName("jnt_wpn_rgd5"), 1, 1, 1, false)
         fp.welded = true
         if not fp.weldLogged then
             fp.weldLogged = true
-            local rl, rr = fp.bottle.RelativeLocation, fp.bottle.RelativeRotation
+            local rl, rr = bottle.RelativeLocation, bottle.RelativeRotation
             log(string.format("FP: welded to jnt_wpn_rgd5 rel %.1f %.1f %.1f rot %.1f %.1f %.1f",
                 rl.X, rl.Y, rl.Z, rr.Pitch, rr.Yaw, rr.Roll))
         end
@@ -669,8 +718,9 @@ local function rigWeld()
 end
 
 local function trackTick()
-    if not (fp.bottle and fp.bottle:IsValid() and fp.mesh and fp.mesh:IsValid()
-            and fp.anchor and fp.anchor:IsValid() and fp.anchor ~= fp.mesh) then return end
+    if not (fp.bottle and fp.mesh and fp.anchor
+            and fp.anchor ~= fp.mesh
+            and objAlive(fp.bottle) and objAlive(fp.mesh) and objAlive(fp.anchor)) then return end
     local okD, dR, dL = pcall(handGrenadeDistances)
     if okD and dR then
         local d = math.min(dR, dL)
@@ -733,31 +783,26 @@ local function hookGrenadeTick()
 end
 
 local function fpRestore()
+    equipGeneration = equipGeneration + 1
+    mp.cur = {}
     pcall(function()
-        if fp.mesh and fp.mesh:IsValid() then
+        if objAlive(fp.mesh) then
             fp.mesh:SetVisibility(true, false)
             if fp.prevTick ~= nil then fp.mesh.VisibilityBasedAnimTickOption = fp.prevTick end
         end
     end)
-    pcall(function()
-        if fp.bottle and fp.bottle:IsValid() then fp.bottle:K2_DestroyComponent(fp.bottle) end
-    end)
-    pcall(function()
-        if fp.marker and fp.marker:IsValid() then fp.marker:K2_DestroyComponent(fp.marker) end
-    end)
-    pcall(function()
-        if fp.handDot and fp.handDot:IsValid() then fp.handDot:K2_DestroyComponent(fp.handDot) end
-    end)
-    pcall(function()
-        if fp.rag and fp.rag:IsValid() then fp.rag:K2_DestroyComponent(fp.rag) end
-    end)
+    pcall(function() if objAlive(fp.bottle) then fp.bottle:K2_DestroyComponent(fp.bottle) end end)
+    pcall(function() if objAlive(fp.marker) then fp.marker:K2_DestroyComponent(fp.marker) end end)
+    pcall(function() if objAlive(fp.handDot) then fp.handDot:K2_DestroyComponent(fp.handDot) end end)
+    pcall(function() if objAlive(fp.rag) then fp.rag:K2_DestroyComponent(fp.rag) end end)
     for _, c in ipairs(fp.ragLower or {}) do
-        pcall(function() if c:IsValid() then c:K2_DestroyComponent(c) end end)
+        pcall(function() if objAlive(c) then c:K2_DestroyComponent(c) end end)
     end
     fp.ragLower = nil
     fp.bottle, fp.mesh, fp.animName, fp.prevTick = nil, nil, nil, nil
     fp.anchor, fp.boneName, fp.baseLoc, fp.baseRot = nil, nil, nil, nil
-    fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal, fp.rag = nil, nil, nil, nil, nil, nil
+    fp.marker, fp.handDot, fp.hiddenForPivot, fp.leftLogged, fp.midLocal = nil, nil, nil, nil, nil
+    fp.rag = nil
     fp.gripLogged, fp.welded, fp.weldLogged, fp.tickN, fp.flameAnim = nil, nil, nil, nil, nil
 end
 
@@ -775,10 +820,26 @@ local function mainHandSID()
     return sid
 end
 
+local function currentRagMesh(anim)
+    if mainHandSID() ~= "GrenadeMolotov" or not objAlive(anim) then return nil end
+    local mesh
+    pcall(function() mesh = anim:GetOwningComponent() end)
+    if not objAlive(mesh) then
+        pcall(function() mesh = anim:GetOuter() end)
+    end
+    if not objAlive(mesh) then return nil end
+    local current = mesh.AnimScriptInstance
+    if not objAlive(current) or not sameObj(current, anim) then return nil end
+    local assetName = ""
+    pcall(function() assetName = mesh:GetSkeletalMeshAsset():GetFullName() end)
+    if assetName ~= "" and not assetName:find("SK_MolotovBottle", 1, true) then return nil end
+    return mesh
+end
+
 local fpSwap   -- fwd-decl: equip swap retries while rig socket names are unreadable
 fpSwap = function(anim, attempt)
     -- let the game finish wiring mesh+anim before restyling it
-    ExecuteWithDelay(attempt == 1 and 150 or 400, function()
+    ExecuteInGameThreadWithDelay(attempt == 1 and 150 or 400, function()
         ExecuteInGameThread(function()
             local ok, err = pcall(function()
                 if not (anim and anim:IsValid()) then return end
@@ -887,9 +948,9 @@ fpSwap = function(anim, attempt)
                 if not ragOk then log("FP: rag ERR: " .. tostring(ragErr)) end
                 log("FP: bottle on " .. (target == mesh and "grenade" or "body") .. " bone " .. tostring(bone))
                 local an = fp.animName
-                ExecuteWithDelay(600, function()   -- re-sample once the raise anim settles
+                ExecuteInGameThreadWithDelay(600, function()   -- re-sample once the raise anim settles
                     ExecuteInGameThread(function()
-                        if fp.bottle and fp.bottle:IsValid() and fp.animName == an then
+                        if objAlive(fp.bottle) and fp.animName == an then
                             sampleGrenadeBase("settled")
                             if lockedBase then fp.welded = nil end   -- re-weld off the settled pose
                         end
@@ -979,7 +1040,7 @@ local function lightFlame(anim, variant)
     if not ok then log("FP flame ERR: " .. tostring(err)) end
 end
 local function fpFlame(anim)
-    ExecuteWithDelay(300, function()
+    ExecuteInGameThreadWithDelay(300, function()
         ExecuteInGameThread(function()
             local sid = mainHandSID()
             if not (sid:find("Molotov") or sid == "unreadable") then return end
@@ -991,8 +1052,9 @@ end
 RegisterKeyBind(Key.DEL, function()   -- Lua flame variant cycler (retired fallback)
     ExecuteInGameThread(function()
         FLAME_VARIANT = FLAME_VARIANT % 4 + 1
-        if fp.flameAnim and fp.flameAnim:IsValid() then
-            lightFlame(fp.flameAnim, FLAME_VARIANT)
+        local anim = objAlive(fp.flameAnim) and fp.flameAnim or nil
+        if anim then
+            lightFlame(anim, FLAME_VARIANT)
         else
             log("FP: DEL - no live hands anim to relight")
         end
@@ -1001,9 +1063,10 @@ end)
 
 local function flameNudge(axis, d)
     ExecuteInGameThread(function()
-        if not (fp.rag and fp.rag:IsValid()) then return end
+        local rag = objAlive(fp.rag) and fp.rag or nil
+        if not rag then return end
         FLAME_OFF[axis] = FLAME_OFF[axis] + d
-        fp.rag:K2_SetRelativeLocation(
+        rag:K2_SetRelativeLocation(
             { X = FLAME_OFF.X, Y = FLAME_OFF.Y, Z = FLAME_OFF.Z }, false, {}, false)
         log(string.format("FP: flame off X=%g Y=%g Z=%g", FLAME_OFF.X, FLAME_OFF.Y, FLAME_OFF.Z))
     end)
@@ -1020,24 +1083,16 @@ RegisterKeyBind(Key.PAGE_DOWN, function() flameNudge("Z", -3) end)
 -- — kick it per equip. Readback-gated retry; forces PhysicsOnly collision once
 -- if the first kick lands on no bodies (PA bodies have collision disabled).
 local kickRagPhysics
-kickRagPhysics = function(anim, attempt)
-    ExecuteWithDelay(attempt == 1 and 250 or 400, function()
+kickRagPhysics = function(anim, attempt, generation)
+    generation = generation or equipGeneration
+    ExecuteInGameThreadWithDelay(attempt == 1 and 250 or 400, function()
         ExecuteInGameThread(function()
+            if generation ~= equipGeneration then return end
             local simulating = false
             pcall(function()
-                if not (anim and anim:IsValid()) then simulating = true return end
-                local sid = mainHandSID()
-                if not (sid:find("Molotov") or sid == "unreadable") then return end
-                local mesh
-                pcall(function() mesh = anim:GetOwningComponent() end)
-                if not (mesh and mesh:IsValid()) then
-                    pcall(function() mesh = anim:GetOuter() end)
-                end
-                if not (mesh and mesh:IsValid()) then return end
-                -- advisory gate: only hard-skip on a KNOWN foreign mesh (accessor may not reflect)
-                local fn = ""
-                pcall(function() fn = tostring(mesh:GetSkeletalMeshAsset():GetFullName()) end)
-                if fn ~= "" and not fn:find("SK_MolotovBottle", 1, true) then return end
+                local mesh = currentRagMesh(anim)
+                if not mesh then return end
+                local sid = "GrenadeMolotov"
                 mesh:SetAllBodiesBelowSimulatePhysics(FName("jnt_fuse"), true, true)
                 mesh:SetAllBodiesBelowPhysicsBlendWeight(FName("jnt_fuse"), 1.0, false, true)
                 pcall(function() simulating = mesh:IsSimulatingPhysics(FName("jnt_fuse")) end)
@@ -1067,7 +1122,7 @@ kickRagPhysics = function(anim, attempt)
                     pcall(function() mesh:SetCollisionEnabled(2) end)
                 end
             end)
-            if not simulating and attempt < 6 then kickRagPhysics(anim, attempt + 1) end
+            if not simulating and attempt < 4 then kickRagPhysics(anim, attempt + 1, generation) end
         end)
     end)
 end
@@ -1097,23 +1152,15 @@ local function loadFirst(paths)
     end
 end
 local ragFire
-ragFire = function(anim, attempt)
-    ExecuteWithDelay(attempt == 1 and 400 or 500, function()
+ragFire = function(anim, attempt, generation)
+    generation = generation or equipGeneration
+    ExecuteInGameThreadWithDelay(attempt == 1 and 400 or 500, function()
         ExecuteInGameThread(function()
+            if generation ~= equipGeneration then return end
             local ok, err = pcall(function()
-                if not (anim and anim:IsValid()) then return end
-                if fp.rag and fp.rag:IsValid() then return end
-                local sid = mainHandSID()
-                if not (sid:find("Molotov") or sid == "unreadable") then return end
-                local mesh
-                pcall(function() mesh = anim:GetOwningComponent() end)
-                if not (mesh and mesh:IsValid()) then
-                    pcall(function() mesh = anim:GetOuter() end)
-                end
-                if not (mesh and mesh:IsValid()) then return end
-                local fn = ""
-                pcall(function() fn = tostring(mesh:GetSkeletalMeshAsset():GetFullName()) end)
-                if fn ~= "" and not fn:find("SK_MolotovBottle", 1, true) then return end
+                if objAlive(fp.rag) then return end
+                local mesh = currentRagMesh(anim)
+                if not mesh then return end
                 local owner = mesh:GetOwner()
                 local ncClass = StaticFindObject("/Script/Niagara.NiagaraComponent")
                 if not (ncClass and ncClass:IsValid() and owner and owner:IsValid()) then return end
@@ -1146,39 +1193,38 @@ ragFire = function(anim, attempt)
                 -- flame on the hem-end bone; follows the swinging tip exactly.
                 local comp = lightAt("jnt_fuse")
                 if not comp then log("ragfire: AddComponentByClass failed") return end
-                fp.ragLower = {}
+                local lower = {}
                 if tipNs then
                     local c = lightAt("jnt_fuse_end", 1, tipNs)
-                    if c then fp.ragLower[#fp.ragLower + 1] = c end
+                    if c then lower[#lower + 1] = c end
                 end
                 fp.rag, fp.mesh, fp.animName = comp, mesh, anim:GetFullName()
+                fp.ragLower = lower   -- wrappers; douse resolves via objAlive
+                mp.cur = {}
                 log(string.format("ragfire: lit attempt %d (%s + tip %s)", attempt,
                     nsPath:match("([^/]+)$"), tipPath and tipPath:match("([^/]+)$") or "none"))
             end)
             if not ok then log("ragfire ERR: " .. tostring(err)) end
-            if not (fp.rag and fp.rag:IsValid()) and attempt < 5 then ragFire(anim, attempt + 1) end
+            if not objAlive(fp.rag) and attempt < 5 then ragFire(anim, attempt + 1, generation) end
         end)
     end)
 end
 
 douseRagFire = function(why)
+    equipGeneration = equipGeneration + 1
+    mp.cur = {}
     if not fp.rag then return end
+    local rag, lower = fp.rag, fp.ragLower
+    fp.rag, fp.ragLower = nil, nil
     ExecuteInGameThread(function()
         pcall(function()
-            if fp.rag and fp.rag:IsValid() then
-                fp.rag:Deactivate()
-                fp.rag:K2_DestroyComponent(fp.rag)
-            end
+            if objAlive(rag) then rag:Deactivate() rag:K2_DestroyComponent(rag) end
         end)
-        for _, c in ipairs(fp.ragLower or {}) do
+        for _, c in ipairs(lower or {}) do
             pcall(function()
-                if c:IsValid() then
-                    c:Deactivate()
-                    c:K2_DestroyComponent(c)
-                end
+                if objAlive(c) then c:Deactivate() c:K2_DestroyComponent(c) end
             end)
         end
-        fp.rag, fp.ragLower = nil, nil
         log("ragfire: doused (" .. tostring(why) .. ")")
     end)
 end
@@ -1199,8 +1245,6 @@ local MP_WARP_RATE = 6.0
 local MP_STEP      = 1 / 30
 local MP_MAX_LINES = 400      -- per montage, so a looping one cannot flood the log
 local MP_TEAR      = "tearoff"
-
-local mp = { cur = {}, bones = {}, freeze = false, step = 0, hooked = false }
 
 local function mpNum(s, prop)
     local v
@@ -1324,10 +1368,6 @@ local function mpWatch(who, inst, mesh)
         end
     end
 
-    -- shipping config (jump mode, no verbose) needs nothing past the montage-change
-    -- jump above; skip the per-frame pos/rate reads — UObject traffic on a montage
-    -- that may be blending out is prime stale-ref AV surface (crash dumps 2026-10-25:
-    -- AV at 0xffffffffffffffff inside UE4SS Lua dispatch during molotov spam)
     if not (MP_VERBOSE or mp.freeze or st.warping or st.frozen) then return end
 
     local pos, rate = -1, -1
@@ -1367,8 +1407,8 @@ local function mpWatch(who, inst, mesh)
 end
 
 local function mpTick()
-    if not fp.rag then return end   -- our molotov is the only thing worth sampling
-    local wm = fp.mesh
+    if not objAlive(fp.rag) then return end   -- our molotov is the only thing worth sampling
+    local wm = objAlive(fp.mesh) and fp.mesh or nil
     if not (wm and wm:IsValid()) then return end
     local ai, body
     pcall(function() ai = wm.AnimScriptInstance end)
@@ -1400,8 +1440,8 @@ end
 -- but never fired — pin-pull returned silently). Poll at hover-mirror cadence
 -- while the bottle is lit; mpWatch's montage-name latch makes double-driving
 -- idempotent if the HUD hook ever comes back.
-LoopAsync(60, function()
-    if fp.rag then
+LoopInGameThreadWithDelay(60, function()
+    if MP_ENABLED and fp.rag then
         ExecuteInGameThread(function() pcall(mpTick) end)
     end
     return false
@@ -1428,26 +1468,43 @@ if MP_ENABLED and MP_VERBOSE then
     }, " "))
 end
 
-NotifyOnNewObject(FP_ANIM_PATH, function(anim)
-    if MP_ENABLED then mpHook() end   -- main-state context: async registration stores a dead ref
-    kickRagPhysics(anim, 1)
-    if RAG_FIRE_ENABLED then ragFire(anim, 1) end
-    if FP_SWAP_ENABLED then
-        hookGrenadeTick()   -- main-state context; HUD widget class is loaded once hands are up
-        fpSwap(anim, 1)
-    elseif FLAME_ENABLED then
-        fpFlame(anim)
-    end
+local fpAnimSeen = {}
+LoopInGameThreadWithDelay(120, function()
+    ExecuteInGameThread(function()
+        pcall(function()
+            for _, anim in ipairs(FindAllOf("AnimBP_Rgd5_fp_C") or {}) do
+                if anim:IsValid() and not anim:GetFullName():find("Default__") then
+                    local a = regAddr(anim)
+                    if a and not fpAnimSeen[a] then
+                        if currentRagMesh(anim) then
+                            fpAnimSeen[a] = true
+                            equipGeneration = equipGeneration + 1
+                            if MP_ENABLED then mpHook() end
+                            kickRagPhysics(anim, 1)
+                            if RAG_FIRE_ENABLED then ragFire(anim, 1) end
+                            if FP_SWAP_ENABLED then
+                                hookGrenadeTick()
+                                fpSwap(anim, 1)
+                            elseif FLAME_ENABLED then
+                                fpFlame(anim)
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+    return false
 end)
 
 -- Un-swap when the hands anim changes (lowered / thrown / weapon switched).
-LoopAsync(500, function()
+LoopInGameThreadWithDelay(500, function()
     if not (fp.bottle or fp.rag) then return false end
     ExecuteInGameThread(function()
         local keep = false
         pcall(function()
-            local comp = fp.bottle or fp.rag
-            if fp.mesh:IsValid() and comp:IsValid() then
+            if objAlive(fp.mesh)
+                    and (objAlive(fp.bottle) or objAlive(fp.rag)) then
                 local cur = fp.mesh.AnimScriptInstance
                 keep = cur and cur:IsValid() and cur:GetFullName() == fp.animName
             end
@@ -1488,15 +1545,19 @@ local HOLD_BURN_PERIOD = 1500    -- ms between ticks (~0.33 HP/s)
 local HOLD_BURN_FLOOR = 8.0      -- stop singeing below this HP
 local holdBurn = { n = 0, probed = false, debt = 0 }
 
-LoopAsync(HOLD_BURN_PERIOD, function()
-    if not HOLD_BURN_ENABLED then return true end
+local holdBurnTimer
+holdBurnTimer = LoopInGameThreadWithDelay(HOLD_BURN_PERIOD, function()
+    if not HOLD_BURN_ENABLED then
+        CancelDelayedAction(holdBurnTimer)
+        return
+    end
     if not fp.rag then
         holdBurn.n, holdBurn.probed, holdBurn.debt = 0, false, 0
         return false
     end
     ExecuteInGameThread(function()
         pcall(function()
-            if not (fp.rag and fp.rag:IsValid()) then return end
+            if not objAlive(fp.rag) then return end
             local cm = StaticFindObject("/Script/Stalker2.Default__CppMediator")
             local pawn
             pcall(function() pawn = UEHelpers.GetPlayerController().Pawn end)
@@ -1537,14 +1598,15 @@ local function rotStep() return fineStep and 5 or 15 end
 -- fold a camera-relative world move (fwd/right/up) into bone-frame xyz deltas
 local function camNudge(which, sign)
     local ok, err = pcall(function()
-        if not (fp.bottle and fp.bottle:IsValid() and fp.anchor and fp.anchor:IsValid()) then return end
+        local bottle, anchor = fpBottle(), fpAnchor()
+        if not (bottle and anchor) then return end
         local kml = StaticFindObject("/Script/Engine.Default__KismetMathLibrary")
         local rot = UEHelpers.GetPlayerController():GetControlRotation()
         local v
         if which == "fwd" then v = kml:GetForwardVector(rot)
         elseif which == "right" then v = kml:GetRightVector(rot)
         else v = kml:GetUpVector(rot) end
-        local sockRot = fp.anchor:GetSocketRotation(FName(fp.boneName or "None"))
+        local sockRot = anchor:GetSocketRotation(FName(fp.boneName or "None"))
         local sf = kml:GetForwardVector(sockRot)
         local sr = kml:GetRightVector(sockRot)
         local su = kml:GetUpVector(sockRot)
@@ -1581,9 +1643,10 @@ consumeNudges = function()   -- runs inside the tick hook: game-thread, serializ
             logBottleOff(n[2] > 0 and "scale+:" or "scale-:")
         elseif kind == "vis" then
             pcall(function()
-                if fp.bottle and fp.bottle:IsValid() then
+                local b = fpBottle()
+                if b then
                     fp.hiddenForPivot = not fp.hiddenForPivot
-                    fp.bottle:SetVisibility(not fp.hiddenForPivot, false)
+                    b:SetVisibility(not fp.hiddenForPivot, false)
                     log("bottle " .. (fp.hiddenForPivot and "hidden - pivot dot + hand disc exposed" or "shown"))
                 end
             end)
@@ -1613,16 +1676,17 @@ end
 showPivotMarker = function(on)
     pcall(function()
         if not on then
-            if fp.marker and fp.marker:IsValid() then fp.marker:K2_DestroyComponent(fp.marker) end
-            if fp.handDot and fp.handDot:IsValid() then fp.handDot:K2_DestroyComponent(fp.handDot) end
+            pcall(function() if objAlive(fp.marker) then fp.marker:K2_DestroyComponent(fp.marker) end end)
+            pcall(function() if objAlive(fp.handDot) then fp.handDot:K2_DestroyComponent(fp.handDot) end end)
             fp.marker, fp.handDot = nil, nil
             return
         end
-        if fp.marker and fp.marker:IsValid() then return end
-        if not (fp.bottle and fp.bottle:IsValid() and fp.anchor and fp.anchor:IsValid()) then return end
+        if objAlive(fp.marker) then return end
+        local bottle, anchor = fpBottle(), fpAnchor()
+        if not (bottle and anchor) then return end
         local mesh = StaticFindObject(BOTTLE_MESH_PATH)
         local smcClass = StaticFindObject("/Script/Engine.StaticMeshComponent")
-        local owner = fp.bottle:GetOwner()
+        local owner = bottle:GetOwner()
         if not (mesh and mesh:IsValid() and smcClass and smcClass:IsValid()
                 and owner and owner:IsValid()) then return end
         local idT = { Rotation = { X = 0, Y = 0, Z = 0, W = 1 },
@@ -1634,12 +1698,12 @@ showPivotMarker = function(on)
             m:SetStaticMesh(mesh)
             m:SetCollisionEnabled(0)
             pcall(function() m:SetFirstPersonPrimitiveType(1) end)
-            m:K2_AttachToComponent(fp.anchor, FName(fp.boneName or "None"), 2, 2, 0, false)
+            m:K2_AttachToComponent(anchor, FName(fp.boneName or "None"), 2, 2, 0, false)
             m:SetRelativeScale3D(scale)
             return m
         end
         fp.marker = spawnDot({ X = 0.06, Y = 0.06, Z = 0.06 })      -- mini bottle = bottle pivot
-        fp.handDot = spawnDot({ X = 0.5, Y = 0.5, Z = 0.04 })       -- flat disc = hand joint target
+        fp.handDot = spawnDot({ X = 0.5, Y = 0.5, Z = 0.04 })        -- flat disc = hand joint target
         applyBottleTune()   -- snaps pivot dot onto the pivot; disc stays at the bone origin
     end)
 end
@@ -1721,7 +1785,7 @@ end
 -- The quest chain lands one node at a time, so repaint across the whole window.
 local function nudgeBurst(count, interval)
     for i = 0, count - 1 do
-        ExecuteWithDelay(i * interval, function()
+        ExecuteInGameThreadWithDelay(i * interval, function()
             ExecuteInGameThread(function() pcall(nudgeInventoryUI) end)
         end)
     end
@@ -1750,8 +1814,22 @@ local function craftFire(tag, sid, done)
             local okC, errC = pcall(function() aa:XStartQuestNodeBySID(sid) end)
             if not okC then log("craft: call ERR " .. tostring(errC)) end
             nudgeBurst(12, 250)
-            ExecuteWithDelay(900, function()
+            ExecuteInGameThreadWithDelay(900, function()
                 ExecuteInGameThread(function()
+                    -- re-resolve: the pawn wrapper from 900ms ago may be dead
+                    local cm2 = StaticFindObject("/Script/Stalker2.Default__CppMediator")
+                    local pawn2
+                    pcall(function() pawn2 = UEHelpers.GetPlayerController().Pawn end)
+                    local function counts()
+                        return cm2:GetItemsCountInInventory(pawn2, "Vodka"),
+                               cm2:GetItemsCountInInventory(pawn2, "Bandage"),
+                               cm2:GetItemsCountInInventory(pawn2, "GrenadeMolotov")
+                    end
+                    if not (cm2 and cm2:IsValid() and pawn2 and pawn2:IsValid()) then
+                        log("craft: follow-up lost cm/pawn")
+                        if done then done() end
+                        return
+                    end
                     local v1, b1, m1 = counts()
                     log(string.format("craft[%s]: after  vodka=%s bandage=%s molotov=%s",
                         tag, tostring(v1), tostring(b1), tostring(m1)))
@@ -1794,8 +1872,12 @@ local quietUntil = 0
 local function quietBanners(seconds)
     if not QUIET_BANNERS then return end
     quietUntil = os.clock() + seconds
-    LoopAsync(200, function()
-        if os.clock() >= quietUntil then return true end
+    local timer
+    timer = LoopInGameThreadWithDelay(200, function()
+        if os.clock() >= quietUntil then
+            CancelDelayedAction(timer)
+            return
+        end
         ExecuteInGameThread(function()
             pcall(function()
                 for _, nw in ipairs(FindAllOf("NotificationWidget") or {}) do
@@ -1843,12 +1925,12 @@ local function injectCraftEntry(menu)
 end
 
 -- hover mirror: native rows get this from their bound delegates; ours is unbound
-LoopAsync(60, function()
+LoopInGameThreadWithDelay(60, function()
     if not menuCraft.entry then return false end
     ExecuteInGameThread(function()
         pcall(function()
-            local e = menuCraft.entry
-            if not (e and e:IsValid()) then menuCraft.entry = nil return end
+            local e = objAlive(menuCraft.entry) and menuCraft.entry or nil
+            if not e then menuCraft.entry = nil return end
             local hov = e:IsHovered()
             if hov ~= menuCraft.hovered then
                 menuCraft.hovered = hov
@@ -1859,16 +1941,29 @@ LoopAsync(60, function()
     return false
 end)
 
-NotifyOnNewObject("/Game/GameLite/FPS_Game/UIRemaster/Inventory/W_RightClickMenu.W_RightClickMenu_C", function(menu)
-    menuCraft.entry = nil   -- stale row from a menu closed without a click
-    -- native rows populate right after construction; ours slots in behind them
-    ExecuteWithDelay(50, function()
-        ExecuteInGameThread(function()
-            pcall(function()
-                if menu:IsValid() then injectCraftEntry(menu) end
-            end)
+local menuSeen = {}
+LoopInGameThreadWithDelay(120, function()
+    ExecuteInGameThread(function()
+        pcall(function()
+            for _, menu in ipairs(FindAllOf("W_RightClickMenu_C") or {}) do
+                if menu:IsValid() and not menu:GetFullName():find("Default__") then
+                    local menuAddr = regAddr(menu)
+                    if menuAddr and not menuSeen[menuAddr] then
+                        menuSeen[menuAddr] = true
+                        menuCraft.entry = nil   -- stale row from a menu closed without a click
+                        ExecuteInGameThreadWithDelay(50, function()
+                            ExecuteInGameThread(function()
+                                pcall(function()
+                                    if objAlive(menu) then injectCraftEntry(menu) end
+                                end)
+                            end)
+                        end)
+                    end
+                end
+            end
         end)
     end)
+    return false
 end)
 
 local function hideMenu()
@@ -1883,8 +1978,8 @@ RegisterKeyBind(Key.LEFT_MOUSE_BUTTON, function()
     if not menuCraft.entry or menuCraft.busy then return end
     ExecuteInGameThread(function()
         pcall(function()
-            local entry = menuCraft.entry
-            if not (entry and entry:IsValid()) then
+            local entry = objAlive(menuCraft.entry) and menuCraft.entry or nil
+            if not entry then
                 menuCraft.entry = nil   -- menu died without a craft; re-cheapen the gate
                 return
             end

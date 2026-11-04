@@ -2,10 +2,10 @@
 
 Two projects live here:
 
-| Project              | What                                                                                                              | Status                        |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| **Molotov Cocktail** | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                 | Playable, iterating on polish |
-| **ZoneLink**         | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental)) | Tier A ghost verified         |
+| Project              | What                                                                                                                                                            | Status                              |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| **Molotov Cocktail** | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                                                               | Playable, iterating on polish       |
+| **ZoneLink**         | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental))                                               | Tier A ghost verified               |
 | **ZoneXM**           | Conversation awareness for your own music — ducks Windows audio when the Zone demands attention ([details](#zonexm--conversation-awareness-for-external-music)) | Working: gunfire, mutants, dialogue |
 
 ## Molotov Cocktail
@@ -205,25 +205,25 @@ lands; for now it rides along here.
 
 ## ZoneXM — conversation awareness for external music
 
-*"Many stalkers were hurt in the making of this modification... of course."*
+_"Many stalkers were hurt in the making of this modification... of course."_
 
 Play your own music over the game; ZoneXM ducks it — every app except the game, each to a
 fraction of its own volume — whenever the Zone needs your ears, and fades it back when the
 dust settles. Two cooperating halves joined by a flag file:
 
 | Half     | Lives in                                                               | Does                                                                                                        |
-| -------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| -------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Sensor   | [ue4ss-mods/ZoneXM/](ue4ss-mods/ZoneXM/) (UE4SS Lua)                   | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM\alert.flag` alive while it lasts |
 | Watchdog | [tools/zonexm-watchdog.ps1](tools/zonexm-watchdog.ps1) (PowerShell 7+) | Polls the flag, ducks per-app CoreAudio session volumes, tray icon shows armed/ducked, restores exactly     |
 
 Sensor tiers (each refreshes a timestamp; the flag stays hot while any window is open):
 
-| Tier     | Trigger                             | Mechanism                                                | Tail |
-| -------- | ----------------------------------- | --------------------------------------------------------- | ---- |
-| Gunfire  | any shot near Skif (player or NPC)  | `ItemAppearanceComponent:OnShotSoundStart` hook (proven)  | 6s   |
-| Beasts   | live mutant within 35 m             | `FindAllOf("AnimInstanceMutant")` radar sweep, `IsAlive`-filtered | 3s, self-refreshing |
-| Speech   | anyone talking (dialog, bark, cutscene) | `SubtitleView` visibility poll — needs subtitles ON    | 2.5s |
-| Melee    | mutant lunge                        | `Obj:OnMeleeAttack_BP` battery (candidates under test)    | 3s   |
+| Tier    | Trigger                                 | Mechanism                                                         | Tail                |
+| ------- | --------------------------------------- | ----------------------------------------------------------------- | ------------------- |
+| Gunfire | any shot near Skif (player or NPC)      | `ItemAppearanceComponent:OnShotSoundStart` hook (proven)          | 6s                  |
+| Beasts  | live mutant within 35 m                 | `FindAllOf("AnimInstanceMutant")` radar sweep, `IsAlive`-filtered | 3s, self-refreshing |
+| Speech  | anyone talking (dialog, bark, cutscene) | `SubtitleView` visibility poll — needs subtitles ON               | 2.5s                |
+| Melee   | mutant lunge                            | `Obj:OnMeleeAttack_BP` battery (candidates under test)            | 3s                  |
 
 The watchdog fades instead of stepping: smoothstep dip over 350 ms (combat is urgent),
 rise over 1.5 s (recovery is musical). Per-session baselines mean every app returns to

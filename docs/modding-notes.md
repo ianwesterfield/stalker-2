@@ -170,21 +170,41 @@ cooks (stale pak cache).
 
 ## UE4SS survival rules
 
-- Crash lessons (all native AVs, `pcall` catches none):
-  1. Never call UObject methods or unwrap hook params inside a physics dispatch hook.
-  2. Never mass-sweep live mesh components (`FindAllOf` + property reads on subclasses).
-  3. Never `LoopAsync`+`ExecuteInGameThread` per frame — hook a per-frame UFunction instead.
-  4. Rapid keybind handlers must queue plain data; drain the queue inside the frame hook.
-  5. `RegisterHook` from inside an async context (`ExecuteWithDelay` etc.) stores a dead
-     callback ref — register from main-state context only.
-  6. Even pcall'd per-frame UObject reads (montage pos/rate polling) AV under churn —
-     2026-10-25 molotov-spam dumps: `EXCEPTION_ACCESS_VIOLATION reading 0xffffffffffffffff`
-     inside UE4SS Lua dispatch. Poll only while a mode actually needs the values.
-  7. Driving UI state machines out-of-band is a native-AV lottery: calling
-     `NotificationWidget:HideNotificationMain/TryShowNextNotify` from a timer while a
-     banner animated crashed at null+0x2e9 (2026-11-02). Calling a widget's own hover
-     handlers (`OnButtonHovered/UnHovered`) on an injected row is fine — they only touch
-     the row's own visuals. Probe state-machine verbs interactively before scripting them.
+- Verified scheduling contract for installed commit `5e627997` (2026-11-03):
+  `LoopAsync` and `ExecuteWithDelay` run asynchronously. UObject reads and mutations
+  belong on the game thread. MolotovFire and ZoneXM now use
+  `LoopInGameThreadWithDelay`; MolotovFire retries use `ExecuteInGameThreadWithDelay`.
+  These APIs already exist in the installed DLL's source; no DLL upgrade was made.
+  The local configuration selects `EngineTick` as the default scheduling method.
+  Source: [LuaMod.cpp at the installed commit](https://github.com/UE4SS-RE/RE-UE4SS/blob/5e627997bf265ae6fc89d23357543d8c8ac05a6f/UE4SS/src/Mod/LuaMod.cpp).
+- Important API difference: native repeating timers in this commit **ignore callback
+  return values** (`call_function(0, 0)`). Stop them with `CancelDelayedAction(handle)`,
+  not `return true`. The native timer retains its callback through a Lua registry
+  reference. Callback count alone does not establish a dangling reference or GC bug.
+- `pcall` catches Lua errors, not native access violations. Use `wrapper:IsValid()`;
+  there is no global `IsValid` in this build. Validity is not ownership and does not
+  guarantee that a component is still part of the current equip. Do not treat either
+  address lookup or validity checking as a lifetime guarantee.
+- Delayed rag physics/fire jobs carry an equip generation. Douse/restore invalidates
+  pending jobs before they touch captured objects. Jobs also verify the held item and
+  that the mesh's current animation instance still matches. Montage state resets on
+  cleanup/new fire; a global "done" latch must not suppress the other montage.
+- Keep physics-hook work minimal (OnHit records an impact for the tracker), and defer
+  keybind-driven UObject work. Keep notification state-machine suppression disabled:
+  a native crash was observed while calling those methods during animated banners.
+- Crash `50ACE194...` occurred at 546 seconds, reading `0x0000023f26d754f9`, with UE4SS
+  stack offsets beginning `c71b00`, `c7274f`, `c63fae`. This does **not** identify the
+  responsible Lua callback, prove NotifyOnNewObject was involved, or prove that
+  callback volume caused the crash. The preserved log is `UE4SS-investigation.log`
+  alongside that crash report. In-game verification is still required.
+- Exact symbolication needs a matching PDB: installed DLL identity is
+  `{21AD178D-4639-470E-971E-F115B4924854}`, age 21. The stable and experimental PDBs
+  previously checked did not match. Nearest-export offsets are not function boundaries;
+  earlier claims that `c6xxxx` means generated trampolines were not established.
+- Regression checks: from this repo, run `lua54 tools/test-ue4ss.lua .` with Lua 5.4.
+  Tests load the real mod scripts with mocked UE4SS APIs and check timer registration,
+  cancellation, cleanup, animation ownership, and thread confinement. They do not
+  exercise native UObject lifetimes, physics, or prove the game cannot crash.
 - Player damage feedback is keyed engine-side to the damage **event**, not to the effect
   prototype. Burn pulls the fire roar + `BurnDamageEffectProcessor` red screen edges; re-typing
   to Strike merely swaps in that type's feedback (hit vignette plus a pain grunt that reads as
@@ -211,12 +231,12 @@ cooks (stale pak cache).
 - Don't hand-extend a byte pattern past a known instruction: a byte-walk can't tell opcodes
   from operands (`C1 E8 10`, `shr eax,0x10`, reads as a `call rel32` and silently corrupts the
   pattern). Stop at an anchor you decoded deliberately.
-- Reliable per-frame tick: HUD widget `W_UpdatedStatPanel_C:Tick`. `ReceiveTick` existing in
-  reflection ≠ firing — demand proof-of-life.
+- HUD widget `W_UpdatedStatPanel_C:Tick` has registered without firing on some patches.
+  Reflection presence and successful hook registration are not proof of execution.
 - `FindAllOf` returns subclasses; skip `Default__*`. Missing-property reads return a
   `TrivialObject` sentinel that is `~= nil` — false positives everywhere.
 - **Injecting into the inventory right-click menu** (probe series 2026-11-01/02):
-  `W_RightClickMenu_C` is constructed per-open (`NotifyOnNewObject` = the trigger), its `Menu`
+  `W_RightClickMenu_C` is constructed per-open (currently discovered by polling), its `Menu`
   is a plain `VerticalBox`, and `MenuItemWidgetClass` + `WidgetBlueprintLibrary:Create` +
   `AddChild` renders a genuine styled row (copy `TextColor*` field-by-field — assigning a Lua
   table over a struct property silently no-ops). BUT the game binds row button delegates
