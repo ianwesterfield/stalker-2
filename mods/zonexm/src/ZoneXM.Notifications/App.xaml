@@ -13,13 +13,18 @@
                     <SolidColorBrush x:Key="SubtitleTitleBrush" Color="#FFD45A" />
                     <SolidColorBrush x:Key="SubtitleBodyBrush" Color="#F6F6F3" />
                     <SolidColorBrush x:Key="SubtitleShadowBrush" Color="#CC000000" />
-                    <SolidColorBrush x:Key="CompanionBackgroundBrush" Color="#171916" />
+                    <ImageBrush x:Key="CompanionBackgroundBrush" ImageSource="ms-appx:///Assets/Background.png" Stretch="UniformToFill" />
+                    <AcrylicBrush x:Key="CompanionGlassBrush" TintColor="#1C1E1C" TintOpacity="0.35" TintLuminosityOpacity="0.45" FallbackColor="#E62A2C2A" />
+                    <AcrylicBrush x:Key="TabViewItemHeaderBackgroundSelected" TintColor="#1C1E1C" TintOpacity="0.35" TintLuminosityOpacity="0.45" FallbackColor="#E62A2C2A" />
+                    <SolidColorBrush x:Key="CompanionGlassBorderBrush" Color="#38FFFFFF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
                     <SolidColorBrush x:Key="SubtitleTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="SubtitleBodyBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                     <SolidColorBrush x:Key="SubtitleShadowBrush" Color="Transparent" />
                     <SolidColorBrush x:Key="CompanionBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="CompanionGlassBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                    <SolidColorBrush x:Key="CompanionGlassBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
             <Style TargetType="TextBlock">
@@ -36,6 +41,12 @@
             </Style>
             <Style x:Key="CompanionShellStyle" TargetType="Grid">
                 <Setter Property="Background" Value="{ThemeResource CompanionBackgroundBrush}" />
+            </Style>
+            <Style x:Key="CompanionGlassStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CompanionGlassBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CompanionGlassBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="0,8,8,8" />
             </Style>
         </ResourceDictionary>
     </Application.Resources>

@@ -25,10 +25,23 @@ try {
   foreach ($item in @(@('StoreLogo', 50), @('Square44x44Logo', 44), @('Square150x150Logo', 150))) {
     $bitmap = [Drawing.Bitmap]::new($original, [int]$item[1], [int]$item[1])
     try { $bitmap.Save("$stage\Assets\$($item[0]).png", [Drawing.Imaging.ImageFormat]::Png) }
-    finally { $bitmap.Dispose() }
+  finally { $bitmap.Dispose() }
   }
-  $bitmap = [Drawing.Bitmap]::new($original, 32, 32)
+}
+finally { $original.Dispose() }
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'make-zonexm-background.ps1') -OutputDirectory "$stage\Assets"
+if ($LASTEXITCODE -ne 0) { throw 'Background art generation failed' }
+$trayArt = [Drawing.Image]::FromFile("$stage\Assets\RadiationIcon.png")
+try {
+  $bitmap = [Drawing.Bitmap]::new(32, 32)
   try {
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    try {
+      $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+      $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+      $graphics.DrawImage($trayArt, 0, 0, 32, 32)
+    }
+    finally { $graphics.Dispose() }
     $handle = $bitmap.GetHicon()
     try {
       $icon = [Drawing.Icon]::FromHandle($handle)
@@ -39,7 +52,7 @@ try {
   }
   finally { $bitmap.Dispose() }
 }
-finally { $original.Dispose() }
+finally { $trayArt.Dispose() }
 $sdk = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory |
   Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' -and (Test-Path "$($_.FullName)\x64\makeappx.exe") } |
   Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1

@@ -104,7 +104,6 @@ internal sealed class BridgeWindow : Window
     {
         Title = "ZoneXM Notifications";
         AppWindow.Resize(new Windows.Graphics.SizeInt32(780, 740));
-        SystemBackdrop = new MicaBackdrop();
         if (AppWindow.Presenter is OverlappedPresenter presenter)
             presenter.SetBorderAndTitleBar(true, false);
         Directory.CreateDirectory(directory);
@@ -112,10 +111,12 @@ internal sealed class BridgeWindow : Window
         bridge.Clear();
         audio = new AudioDucker(Path.Combine(directory, "alert.flag"), activity.Add);
         var root = new StackPanel { Margin = new Thickness(24), Spacing = 8 };
-        var tabs = new TabView { IsAddTabButtonVisible = false, CanDragTabs = false, CanReorderTabs = false };
+        var tabs = new TabView {
+            IsAddTabButtonVisible = false, CanDragTabs = false, CanReorderTabs = false, Margin = new Thickness(12, 0, 12, 12)
+        };
         var settingsTab = new TabViewItem {
             IsClosable = false,
-            Header = SubtitleText("Settings", true, 14), Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }
+            Header = SubtitleText("Settings", true, 14), Content = Glass(new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto })
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(settingsTab, "Settings");
         tabs.TabItems.Add(settingsTab);
@@ -135,7 +136,7 @@ internal sealed class BridgeWindow : Window
         logScroll.Content = logView;
         Grid.SetRow(logScroll, 1);
         logPanel.Children.Add(logScroll);
-        var activityTab = new TabViewItem { Header = SubtitleText("Activity log", true, 14), Content = logPanel, IsClosable = false };
+        var activityTab = new TabViewItem { Header = SubtitleText("Activity log", true, 14), Content = Glass(logPanel), IsClosable = false };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(activityTab, "Activity log");
         tabs.TabItems.Add(activityTab);
         Content = CreateShell(tabs);
@@ -259,6 +260,9 @@ internal sealed class BridgeWindow : Window
         return result;
     }
 
+    private static Border Glass(UIElement child) =>
+        new() { Style = (Style)Application.Current.Resources["CompanionGlassStyle"], Child = child };
+
     private Grid CreateShell(TabView tabs)
     {
         var shell = new Grid {
@@ -267,6 +271,17 @@ internal sealed class BridgeWindow : Window
         };
         shell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         shell.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        if (!new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
+        {
+            var sign = new Image {
+                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new System.Uri("ms-appx:///Assets/RadiationSign.png")),
+                Width = 300, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 24, 44, 0), IsHitTestVisible = false
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(sign, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
+            Grid.SetRowSpan(sign, 2);
+            shell.Children.Add(sign);
+        }
         var header = new Grid { MinHeight = 76 };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
