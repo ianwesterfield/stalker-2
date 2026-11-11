@@ -10,9 +10,7 @@ from mathutils import Vector
 OUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.fbx(
-    filepath=os.path.join(OUT_DIR, "SK_MolotovBottle.fbx")
-)
+bpy.ops.import_scene.fbx(filepath=os.path.join(OUT_DIR, "SK_MolotovBottle.fbx"))
 
 meshes = [o for o in bpy.data.objects if o.type == "MESH"]
 print(f"CHECK mesh objects: {[o.name for o in meshes]}")
@@ -53,9 +51,7 @@ for tag in ("RagFlame", "SheathFlame"):
         else:
             print(f"CHECK no {tag} polys found")
 # static twin: helpers stripped, flame normals intact after the edit-mode delete
-bpy.ops.import_scene.fbx(
-    filepath=os.path.join(OUT_DIR, "SM_MolotovBottle.fbx")
-)
+bpy.ops.import_scene.fbx(filepath=os.path.join(OUT_DIR, "SM_MolotovBottle.fbx"))
 sm = next(o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith("SM_"))
 sme = sm.data
 print(f"CHECK SM verts={len(sme.vertices)} polys={len(sme.polygons)}")

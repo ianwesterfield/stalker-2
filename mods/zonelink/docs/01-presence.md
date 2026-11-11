@@ -349,15 +349,15 @@ next = Tier B (C++ skeleton, protocol.h, zonelink-sim).
 
 ## 7. Build sequencing
 
-| Step | Deliverable                                                                                                                                                                                                                         | Tier |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| 1    | Probe pass P-1…P-7 against fresh dump; record findings in this doc                                                                                                                                                                  | —    |
+| Step | Deliverable                                                                                                                                                                                                                                  | Tier |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| 1    | Probe pass P-1…P-7 against fresh dump; record findings in this doc                                                                                                                                                                           | —    |
 | 2    | `mods/zonelink/ue4ss/ZoneLink/Scripts/main.lua`: recorder (own pawn → trace file) + **ghost replay** into puppet. Keybinds: F3 record toggle, F4 ghost spawn/despawn (verify unbound in-game; F5–F12, Ins/Del, Home/End/PgUp/PgDn are taken) | A    |
-| 3    | 10-minute ghost soak: streaming transitions, quickload survival, A-Life coexistence                                                                                                                                                 | A    |
-| 4    | C++ mod skeleton (P-8), port sampler + puppet driver from Lua                                                                                                                                                                       | B    |
-| 5    | `zonelink-sim` + protocol; replay/orbit/echo modes; impairment flags                                                                                                                                                                | B    |
-| 6    | Session layer (HELLO/WELCOME, timeouts, rejoin); 30-min echo soak                                                                                                                                                                   | B    |
-| 7    | Two-machine LAN session (second household PC); join/leave/rejoin                                                                                                                                                                    | C    |
+| 3    | 10-minute ghost soak: streaming transitions, quickload survival, A-Life coexistence                                                                                                                                                          | A    |
+| 4    | C++ mod skeleton (P-8), port sampler + puppet driver from Lua                                                                                                                                                                                | B    |
+| 5    | `zonelink-sim` + protocol; replay/orbit/echo modes; impairment flags                                                                                                                                                                         | B    |
+| 6    | Session layer (HELLO/WELCOME, timeouts, rejoin); 30-min echo soak                                                                                                                                                                            | B    |
+| 7    | Two-machine LAN session (second household PC); join/leave/rejoin                                                                                                                                                                             | C    |
 
 Step 2–3 is the make-or-break demo and needs nothing but the game you already have running.
 

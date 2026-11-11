@@ -42,8 +42,8 @@ if (Want 'export-vanilla') {
   $modTex = Join-Path $Exp 'mod'
   $pf = Join-Path $Zk 'vanilla-textures.txt'
   Get-ChildItem $modTex -Recurse -Filter *.png |
-    ForEach-Object { ($_.FullName.Substring($modTex.Length + 1) -replace '\\', '/') -replace '\.png$', '.uasset' } |
-    Set-Content $pf
+  ForEach-Object { ($_.FullName.Substring($modTex.Length + 1) -replace '\\', '/') -replace '\.png$', '.uasset' } |
+  Set-Content $pf
   $vb = Join-Path $Exp 'vanilla-batch'
   Remove-Item $vb -Recurse -Force -ErrorAction SilentlyContinue
   Check-Done (& "$PSScriptRoot\export-englishzone.ps1" -Source vanilla -PathsFile $pf -JsonOnly -Out $vb 2>&1) 'vanilla texture export'
@@ -79,11 +79,14 @@ if (Want 'validate') {
   Step 'validate'
   $expected = @(Get-ChildItem $PluginContent -Recurse -Filter '*.uasset').Count
   $vdir = Join-Path $Zk 'validate'
+  
   Remove-Item $vdir -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $vdir | Out-Null
   Copy-Item (Join-Path $Zk 'idmod-out\EnglishZone_P.*'), (Join-Path $PaksDir 'global.utoc'), (Join-Path $PaksDir 'global.ucas') $vdir
+  
   $exe = Join-Path $PSScriptRoot '..\tools\EzExport\bin\Release\net10.0\EzExport.exe'
   $usmap = Join-Path $GameDir 'Stalker2\Binaries\Win64\ue4ss\Stalker2-5.5.4-0+UE5-5e627997.usmap'
+  
   $r = & $exe --paks $vdir --game 84213760 --usmap $usmap --oodle 'C:\Tools\FModel\Output\.data\oodle-data-shared.dll' `
     --out (Join-Path $vdir 'out') --filter '\.uasset$' --list 2>&1
   $m = $r | Select-String 'matched (\d+) packages' | Select-Object -Last 1
@@ -94,7 +97,7 @@ if (Want 'validate') {
   $vanilla = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
   Get-Content (Join-Path $Exp 'mod-batch\_package-names.txt') | Where-Object { $_ -like '/Game/*' } | ForEach-Object { [void]$vanilla.Add($_) }
   $new = @($r | Select-String '^\s*Stalker2/Content/(.*)\.uasset$' | ForEach-Object { '/Game/' + $_.Matches[0].Groups[1].Value } |
-      Where-Object { -not $vanilla.Contains($_) })
+    Where-Object { -not $vanilla.Contains($_) })
   "packages with no vanilla counterpart: $($new.Count)"; $new | ForEach-Object { "  NEW $_" }
   if (@($new | Where-Object { $_ -notmatch '/MI_[^/]+$' }).Count) { throw 'non-MI package without vanilla counterpart (wrong path/case?)' }
 }

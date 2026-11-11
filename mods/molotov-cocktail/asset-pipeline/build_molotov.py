@@ -9,7 +9,17 @@ from mathutils import Matrix, Vector
 EXPORTS = r"C:\Tools\FModel\Output\Exports"
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Vanilla game asset, not committed: export it with FModel into ref/ (gitignored).
-RGD5_FBX = os.path.join(HERE, "ref", "Game", "_STALKER2", "SkeletalMeshes", "weapons", "grenades", "RGD5", "SK_RGD5.FBX")
+RGD5_FBX = os.path.join(
+    HERE,
+    "ref",
+    "Game",
+    "_STALKER2",
+    "SkeletalMeshes",
+    "weapons",
+    "grenades",
+    "RGD5",
+    "SK_RGD5.FBX",
+)
 ZG_GLB = os.path.join(
     EXPORTS, r"Stalker2\Mods\ZoneGrenades\Content\Meshes\SK_ZoneGrenadeBottle.glb"
 )

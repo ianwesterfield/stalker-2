@@ -8,7 +8,7 @@ Projects here:
 | **ZoneLink**          | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental))                                               | Tier A ghost verified                          |
 | **ZoneXM**            | Conversation awareness for your own music — ducks Windows audio when the Zone demands attention ([details](#zonexm--conversation-awareness-for-external-music)) | Working: gunfire, mutants, dialogue            |
 | **ZoneStash**         | Quest-item transfers through personal stash context menus ([details](#zonestash--quest-items-in-personal-stashes))                                              | Personal-stash deposit/retrieval user-verified |
-| **English Zone port** | Workshop English signage mod ported from UE 5.1 to 2.1.0 / UE 5.5 ([details](mods/english-zone/README.md))                                                       | 471 assets, in-game verified                   |
+| **English Zone port** | Workshop English signage mod ported from UE 5.1 to 2.1.0 / UE 5.5 ([details](mods/english-zone/README.md))                                                      | 471 assets, in-game verified                   |
 
 ## Layout
 
@@ -70,22 +70,22 @@ there was already this much vodka lying around.
 
 All under [mods/molotov-cocktail/](mods/molotov-cocktail/):
 
-| Layer             | Lives in                                                | Ships as                                                    | Does                                                                |
-| ----------------- | ------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
-| Game-data overlay | [pak/](mods/molotov-cocktail/pak/)                      | `MolotovCocktail_P.pak` → `Content/Paks/~mods`              | Item/explosion/trade/mesh prototypes, localization                  |
-| Custom asset      | [asset-pipeline/](mods/molotov-cocktail/asset-pipeline/) | `MolotovBottle` Zone Kit plugin paks → `Mods/MolotovBottle` | Skeletal bottle + rag + flame (in-hand), static twin (world/thrown) |
-| Runtime behavior  | [ue4ss/MolotovFire/](mods/molotov-cocktail/ue4ss/MolotovFire/) | UE4SS Lua → `Binaries/Win64/ue4ss/Mods`              | Impact detonation, ground fire patches, fuse fallback               |
+| Layer             | Lives in                                                       | Ships as                                                    | Does                                                                |
+| ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| Game-data overlay | [pak/](mods/molotov-cocktail/pak/)                             | `MolotovCocktail_P.pak` → `Content/Paks/~mods`              | Item/explosion/trade/mesh prototypes, localization                  |
+| Custom asset      | [asset-pipeline/](mods/molotov-cocktail/asset-pipeline/)       | `MolotovBottle` Zone Kit plugin paks → `Mods/MolotovBottle` | Skeletal bottle + rag + flame (in-hand), static twin (world/thrown) |
+| Runtime behavior  | [ue4ss/MolotovFire/](mods/molotov-cocktail/ue4ss/MolotovFire/) | UE4SS Lua → `Binaries/Win64/ue4ss/Mods`                     | Impact detonation, ground fire patches, fuse fallback               |
 
 ## Game-data overlay (cfg pak)
 
-| Piece                 | File                                                                                                          | Technique                                                                                        |
-| --------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Throwable item        | [GrenadeMolotov.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/ItemPrototypes/GrenadeMolotov.cfg)                | `refkey=GrenadeRGD5` inheritance; claims the exe's native `EGrenadeType::Molotov` slot           |
-| Fire explosion        | [ExplosionMolotov.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/ExplosionPrototypes/ExplosionMolotov.cfg)       | `refkey=Empty`; `NS_Barrel_Explo` VFX, gas-cylinder SFX, `EDamageSource::Fire`                   |
-| Burning victims       | same file                                                                                                     | `ConcussionEffects`/`NPCConcussionEffects` → `FireBurning` (burn damage over time)               |
-| Bottle meshes         | [MolotovMeshes.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/MeshPrototypes/MolotovMeshes.cfg)                  | Points at our own `/MolotovBottle` plugin: `SK_MolotovBottle` (hand), `SM_MolotovBottle` (world) |
-| Buyable at bartenders | [MolotovTradeStock.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/ItemGeneratorPrototypes/MolotovTradeStock.cfg) | `{bpatch}` named-node append on `BartenderUniversal_TradeItemGenerator` (mod-friendly)           |
-| Name + description    | [localization.en.csv](mods/molotov-cocktail/localization/localization.en.csv)                                  | Full `Game.locres` override rebuilt from vanilla + added keys (pylocres; generated, not committed)                         |
+| Piece                 | File                                                                                                                                | Technique                                                                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Throwable item        | [GrenadeMolotov.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/ItemPrototypes/GrenadeMolotov.cfg)                | `refkey=GrenadeRGD5` inheritance; claims the exe's native `EGrenadeType::Molotov` slot             |
+| Fire explosion        | [ExplosionMolotov.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/ExplosionPrototypes/ExplosionMolotov.cfg)       | `refkey=Empty`; `NS_Barrel_Explo` VFX, gas-cylinder SFX, `EDamageSource::Fire`                     |
+| Burning victims       | same file                                                                                                                           | `ConcussionEffects`/`NPCConcussionEffects` → `FireBurning` (burn damage over time)                 |
+| Bottle meshes         | [MolotovMeshes.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/MeshPrototypes/MolotovMeshes.cfg)                  | Points at our own `/MolotovBottle` plugin: `SK_MolotovBottle` (hand), `SM_MolotovBottle` (world)   |
+| Buyable at bartenders | [MolotovTradeStock.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/ItemGeneratorPrototypes/MolotovTradeStock.cfg) | `{bpatch}` named-node append on `BartenderUniversal_TradeItemGenerator` (mod-friendly)             |
+| Name + description    | [localization.en.csv](mods/molotov-cocktail/localization/localization.en.csv)                                                       | Full `Game.locres` override rebuilt from vanilla + added keys (pylocres; generated, not committed) |
 
 ## Custom bottle asset (the fun part)
 
@@ -265,9 +265,9 @@ Play your own music over the game; ZoneXM ducks it — every app except the game
 fraction of its own volume — whenever the Zone needs your ears, and fades it back when the
 dust settles. Two cooperating halves joined by a flag file:
 
-| Half     | Lives in                                                                                      | Does                                                                                                        |
-| -------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Sensor   | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)                            | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM\alert.flag` alive while it lasts |
+| Half     | Lives in                                                                                           | Does                                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Sensor   | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)                                 | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM\alert.flag` alive while it lasts |
 | Watchdog | [mods/zonexm/scripts/zonexm-watchdog.ps1](mods/zonexm/scripts/zonexm-watchdog.ps1) (PowerShell 7+) | Polls the flag, ducks per-app CoreAudio session volumes, tray icon shows armed/ducked, restores exactly     |
 
 ### Now-playing banners (prototype)

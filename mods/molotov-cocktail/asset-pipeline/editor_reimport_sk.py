@@ -7,7 +7,9 @@ import os
 import unreal
 
 PLUGIN = "/MolotovBottle"
-FBX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out", "SK_MolotovBottle.fbx")
+FBX = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "out", "SK_MolotovBottle.fbx"
+)
 
 sk_path = f"{PLUGIN}/SK_MolotovBottle"
 sk = unreal.EditorAssetLibrary.load_asset(sk_path)

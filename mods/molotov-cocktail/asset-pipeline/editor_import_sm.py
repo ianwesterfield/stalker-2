@@ -7,7 +7,9 @@ import os
 import unreal
 
 PLUGIN = "/MolotovBottle"
-FBX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out", "SM_MolotovBottle.fbx")
+FBX = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "out", "SM_MolotovBottle.fbx"
+)
 
 pipeline = unreal.InterchangeGenericAssetsPipeline()
 cmp = pipeline.get_editor_property("common_meshes_properties")
