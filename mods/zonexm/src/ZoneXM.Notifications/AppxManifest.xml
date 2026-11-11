@@ -3,12 +3,21 @@
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-         IgnorableNamespaces="uap uap3 rescap">
-  <Identity Name="ZoneXM.Notifications" Publisher="CN=ZoneXM" Version="1.1.0.0" ProcessorArchitecture="x64" />
+         xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
+         xmlns:virtualization="http://schemas.microsoft.com/appx/manifest/virtualization/windows10"
+         IgnorableNamespaces="uap uap3 rescap desktop6 virtualization">
+  <Identity Name="ZoneXM.Notifications" Publisher="CN=ZoneXM" Version="1.2.0.0" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>ZoneXM Notifications</DisplayName>
+    <DisplayName>ZoneXM Companion</DisplayName>
     <PublisherDisplayName>ZoneXM</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
+    <!-- The game mod reads and writes this folder, so the package must not redirect it. -->
+    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
+    <virtualization:FileSystemWriteVirtualization>
+      <virtualization:ExcludedDirectories>
+        <virtualization:ExcludedDirectory>$(KnownFolder:LocalAppData)\ZoneXM</virtualization:ExcludedDirectory>
+      </virtualization:ExcludedDirectories>
+    </virtualization:FileSystemWriteVirtualization>
   </Properties>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
@@ -16,13 +25,14 @@
   <Resources><Resource Language="en-us" /></Resources>
   <Applications>
     <Application Id="App" Executable="ZoneXM.Notifications.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="ZoneXM Notifications" Description="Local Notification Center banners for ZoneXM"
+      <uap:VisualElements DisplayName="ZoneXM Companion" Description="Ducks your music when the game needs your attention and forwards selected notifications to ZoneXM"
                          BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png"
                          Square44x44Logo="Assets\Square44x44Logo.png" />
     </Application>
   </Applications>
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
     <uap3:Capability Name="userNotificationListener" />
   </Capabilities>
 </Package>

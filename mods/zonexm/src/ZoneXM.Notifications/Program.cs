@@ -58,8 +58,7 @@ public sealed partial class BridgeApplication : Application
 internal sealed class BridgeWindow : Window
 {
     private readonly string directory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Stalker2", "Saved", "ZoneXM");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZoneXM");
     private readonly NotificationBridge bridge;
     private readonly ActivityLog activity = new();
     private readonly TextBlock logView = new() {
@@ -102,7 +101,7 @@ internal sealed class BridgeWindow : Window
 
     internal BridgeWindow()
     {
-        Title = "ZoneXM Notifications";
+        Title = "ZoneXM Companion";
         AppWindow.Resize(new Windows.Graphics.SizeInt32(780, 740));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
             presenter.SetBorderAndTitleBar(true, false);

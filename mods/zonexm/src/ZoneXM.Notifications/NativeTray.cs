@@ -115,7 +115,7 @@ internal sealed class NativeTray : IDisposable
 
     internal static void ShowExisting()
     {
-        var hwnd = FindWindow(null, "ZoneXM Notifications");
+        var hwnd = FindWindow(null, "ZoneXM Companion");
         if (hwnd == 0) { ShowError("ZoneXM is already starting. Open it from the tray."); return; }
         ShowWindow(hwnd, 9);
         SetForegroundWindow(hwnd);

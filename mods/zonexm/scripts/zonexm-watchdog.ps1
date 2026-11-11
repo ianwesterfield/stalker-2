@@ -30,7 +30,7 @@ $mutexCreated = $false
 $script:mutex = New-Object System.Threading.Mutex($true, "ZoneXM.Watchdog.Singleton", [ref]$mutexCreated)
 if (-not $mutexCreated) { Write-Host "ZoneXM watchdog already running — exiting"; exit 0 }
 
-$flag = Join-Path $env:LOCALAPPDATA "Stalker2\Saved\ZoneXM\alert.flag"
+$flag = Join-Path $env:LOCALAPPDATA "ZoneXM\alert.flag"
 # the game-side Lua must not shell out (console flash steals game input focus) — we own the dir
 $null = New-Item -ItemType Directory -Path (Split-Path $flag) -Force
 

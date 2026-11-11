@@ -64,7 +64,7 @@ if (-not $SkipSignatures) {
 }
 
 # Deploy Lua mods from the repo (repo = source of truth): mods\<mod>\ue4ss\<LuaModName>
-Get-ChildItem (Join-Path $RepoRoot "mods\*\ue4ss") -Directory |
+Get-ChildItem (Join-Path $RepoRoot "mods\*\ue4ss\*") -Directory |
 Where-Object { -not $Mods -or $_.Name -in $Mods } |
 ForEach-Object {
   $dest = Join-Path $ue4ssDir "Mods\$($_.Name)"

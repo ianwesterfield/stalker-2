@@ -267,7 +267,7 @@ dust settles. Two cooperating halves joined by a flag file:
 
 | Half     | Lives in                                                                                           | Does                                                                                                        |
 | -------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Sensor   | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)                                 | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM\alert.flag` alive while it lasts |
+| Sensor   | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)                                 | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\ZoneXM\alert.flag` alive while it lasts                |
 | Watchdog | [mods/zonexm/scripts/zonexm-watchdog.ps1](mods/zonexm/scripts/zonexm-watchdog.ps1) (PowerShell 7+) | Polls the flag, ducks per-app CoreAudio session volumes, tray icon shows armed/ducked, restores exactly     |
 
 ### Now-playing banners (prototype)
@@ -310,7 +310,7 @@ identical metadata cannot be distinguished from the previous play.
 
 Windows PowerShell **5.1** runs the WinRT bridge; the audio watchdog still runs on **7+**.
 The watchdog supervises its hidden child and keeps ducking if the bridge fails. Diagnostics
-are `media.log` and `media-error.log` in `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM`.
+are `media.log` and `media-error.log` in `%LOCALAPPDATA%\ZoneXM`.
 
 ```powershell
 .\shared\scripts\deploy-ue4ss.ps1 -Mods ZoneXM -SkipSignatures
@@ -333,14 +333,14 @@ and load another save. These tests do not prove native UI safety or player compa
 
 ### Windows Notification Center banners
 
-[ZoneXM Notifications](mods/zonexm/src/ZoneXM.Notifications/) is a small, local packaged Windows
+[ZoneXM Companion](mods/zonexm/src/ZoneXM.Notifications/) is a small, local packaged Windows
 companion for players such as Pandora that emit notifications but expose no media session.
 It uses Windows' permission-gated `UserNotificationListener`, not app hooks, notification
 database scraping, or network services. All apps use the same bottom-right quest-style
 `Title - Body` banner (title only when the body is empty), with no app heading or `+1` prefix.
 Title is subtitle-speaker yellow; body and separator are subtitle-dialogue white.
 Subtitle styling exists only after someone speaks, so ZoneXM saves the captured style to
-`%LOCALAPPDATA%\Stalker2\Saved\ZoneXM\subtitle-style.txt`. The file stores font/material asset
+`%LOCALAPPDATA%\ZoneXM\subtitle-style.txt`. The file stores font/material asset
 paths, size, colors, and shadow values, never notification text. It rebuilds that style on a fresh
 load before anyone has spoken. Before any subtitle has ever been captured, or if the saved font
 cannot be loaded, banners still show with the game's default text font and yellow/white colors.
@@ -350,7 +350,8 @@ fields are reversed for display so the artist is yellow and the song is white. O
 retain title/body order. The media-session path uses its explicit artist/song metadata.
 This is an independent styled widget, not an actual quest completion or reward.
 
-The helper uses **WinUI 3 / Windows App SDK with Fluent controls and Mica**, not WPF or WinForms.
+The helper uses **WinUI 3 / Windows App SDK with Fluent controls**, not WPF or WinForms, over a
+generated gray steel background with a rusted radiation sign and acrylic glass tab panels.
 Its standard title bar is replaced by a draggable in-app header with minimize, maximize/restore,
 and close controls; minimize/close still hide to the tray. Subtitle-inspired yellow headings,
 white supporting text, Bahnschrift typography, and small text shadows echo the game.
@@ -371,7 +372,7 @@ that disappear between polls.
   (for example `0x80070005`) are logged and retried with backoff of 5-60 seconds instead of
   stopping forwarding. **Pause forwarding** remains manual until the next launch or Start.
 - Apps appear as Windows exposes them. Check each app you want to forward; consent persists
-  by exact Windows app ID in `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM\helper-settings.json`.
+  by exact Windows app ID in `%LOCALAPPDATA%\ZoneXM\helper-settings.json`.
   Newly discovered/reopened apps stay unchecked unless previously opted in.
   Legacy `notification-apps.json` exclusions are retained but never converted into consent:
   upgrading starts with no opted-in apps. Changing consent skips accumulated history.

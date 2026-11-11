@@ -1,5 +1,13 @@
 [CmdletBinding()]
-param([switch]$Register, [string]$OutputDirectory)
+param(
+  [switch]$Register,
+  [string]$OutputDirectory,
+  # Values from Partner Center > Product identity; omit for a local development build.
+  [string]$IdentityName,
+  [string]$Publisher,
+  [string]$PublisherDisplayName,
+  [version]$Version
+)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
 $source = Join-Path (Split-Path $PSScriptRoot -Parent) 'src\ZoneXM.Notifications'
@@ -11,6 +19,17 @@ if ($LASTEXITCODE -ne 0) { throw 'Notification companion publish failed' }
 Move-Item "$stage\ZoneXM.Notifications.pri" "$stage\resources.pri" -Force
 if (-not (Test-Path "$stage\App.xbf")) { throw 'Compiled WinUI application resources were not published' }
 Copy-Item "$source\AppxManifest.xml" "$stage\AppxManifest.xml" -Force
+if ($IdentityName -or $Publisher -or $PublisherDisplayName -or $Version) {
+  $manifest = [xml](Get-Content "$stage\AppxManifest.xml" -Raw)
+  if ($IdentityName) { $manifest.Package.Identity.Name = $IdentityName }
+  if ($Publisher) { $manifest.Package.Identity.Publisher = $Publisher }
+  if ($PublisherDisplayName) { $manifest.Package.Properties.PublisherDisplayName = $PublisherDisplayName }
+  if ($Version) {
+    if ($Version.Revision -ne 0) { throw 'The Store requires the fourth version part to be 0' }
+    $manifest.Package.Identity.Version = $Version.ToString(4)
+  }
+  $manifest.Save("$stage\AppxManifest.xml")
+}
 $null = New-Item -ItemType Directory -Path "$stage\Assets" -Force
 Add-Type -AssemblyName System.Drawing
 Add-Type -TypeDefinition @'
@@ -62,7 +81,7 @@ if ($LASTEXITCODE -ne 0) { $packOutput | Write-Host; throw 'MSIX validation/pack
 Write-Host "Built and validated $stage.msix (unsigned development package)."
 if ($Register) {
   Add-AppxPackage -Register "$stage\AppxManifest.xml"
-  Write-Host 'Registered ZoneXM Notifications. Launch it from Start, then grant access in its window.'
+  Write-Host 'Registered ZoneXM Companion. Launch it from Start, then grant access in its window.'
 }
 else {
   Write-Host 'To register for this user, rerun with -Register. Windows may require Developer Mode.'

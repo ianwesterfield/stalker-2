@@ -5,7 +5,7 @@ param(
   [switch]$Probe,
   [switch]$Once,
   [int]$ParentProcessId = 0,
-  [string]$OutputPath = "$env:LOCALAPPDATA\Stalker2\Saved\ZoneXM\now-playing.txt"
+  [string]$OutputPath = "$env:LOCALAPPDATA\ZoneXM\now-playing.txt"
 )
 $ErrorActionPreference = 'Stop'
 

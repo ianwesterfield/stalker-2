@@ -345,8 +345,9 @@ cooks (stale pak cache).
   `Denied`; the initial locally registered WPF desktop package declaring `runFullTrust` and
   `uap3:userNotificationListener` successfully requested permission from its UI thread.
   `UserNotificationListener.GetNotificationsAsync(Toast)` then delivered a real synthetic
-  toast into the shared `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM` folder, without appdata
-  redirection in the tested installation. Permission must be checked before and after
+  toast into the shared ZoneXM folder (then `%LOCALAPPDATA%\Stalker2\Saved\ZoneXM`, now
+  `%LOCALAPPDATA%\ZoneXM`), without appdata redirection only because the folder already existed.
+  Fresh installs need the manifest's virtualization exclusion for that folder. Permission must be checked before and after
   each asynchronous read; denied/revoked access can otherwise look like an empty list.
 - The companion now uses WinUI 3/Fluent with Windows App SDK, preserving package identity
   and notification permission. The external MSIX build must publish `App.xbf` and rename

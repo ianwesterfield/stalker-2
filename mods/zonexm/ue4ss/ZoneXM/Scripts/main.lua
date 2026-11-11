@@ -14,9 +14,10 @@ local function log(msg) print("[ZoneXM] " .. msg .. "\n") end
 assert(type(LoopInGameThreadWithDelay) == "function",
     "ZoneXM requires UE4SS LoopInGameThreadWithDelay")
 
-local FLAG_DIR = os.getenv("LOCALAPPDATA") .. "\\Stalker2\\Saved\\ZoneXM"
+local VERSION = "1.0.0"
+local FLAG_DIR = os.getenv("LOCALAPPDATA") .. "\\ZoneXM"
 -- no os.execute here: cmd flash at boot stole game input capture (mouse stuck till menu toggle);
--- the watchdog creates this dir, and writeFlag just no-ops until it exists
+-- the ZoneXM Companion creates this dir, and writeFlag just no-ops until it exists
 local FLAG = FLAG_DIR .. "\\alert.flag"
 local TRACK_FILE = FLAG_DIR .. "\\now-playing.txt"
 local NOTIFICATION_FILE = FLAG_DIR .. "\\notification.txt"
@@ -580,4 +581,4 @@ LoopInGameThreadWithDelay(POLL_MS, function()
     return false
 end)
 
-log("loaded (flag: " .. FLAG .. ")")
+log("v" .. VERSION .. " loaded (flag: " .. FLAG .. ")")
