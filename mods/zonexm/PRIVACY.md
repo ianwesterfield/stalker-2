@@ -30,12 +30,12 @@ not record or listen to audio.
 
 All files live in `%LOCALAPPDATA%\ZoneXM` on your PC:
 
-| File                   | Contents                                                                     | Kept                                                  |
-| ---------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `helper-settings.json` | Duck level and the IDs of apps you opted in                                  | Until you change or delete it                         |
+| File                   | Contents                                                                     | Kept                                                 |
+| ---------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `helper-settings.json` | Duck level and the IDs of apps you opted in                                  | Until you change or delete it                        |
 | `notification.txt`     | The latest forwarded notification (app name, title, body) for the game       | Overwritten; cleared on expiry, pause or normal exit |
-| `alert.flag`           | Written by the game mod while ducking is needed; no personal data            | Refreshed while the game runs                         |
-| `subtitle-style.txt`   | Written by the game mod: subtitle font and colour settings; no personal data | Until deleted                                         |
+| `alert.flag`           | Written by the game mod while ducking is needed; no personal data            | Refreshed while the game runs                        |
+| `subtitle-style.txt`   | Written by the game mod: subtitle font and colour settings; no personal data | Until deleted                                        |
 
 The in-app activity log is kept in memory only, never includes notification titles or bodies, and
 is discarded when the app closes.

@@ -2,13 +2,13 @@
 
 Projects here:
 
-| Project               | What                                                                                                                                                            | Status                                         |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **Molotov Cocktail**  | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                                                               | Playable, iterating on polish                  |
-| **ZoneLink**          | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental))                                               | Tier A ghost verified                          |
-| **ZoneXM**            | Conversation awareness for your own music — ducks Windows audio when the Zone demands attention ([details](#zonexm--conversation-awareness-for-external-music)) | Working: gunfire, mutants, dialogue            |
+| Project               | What                                                                                                                                                            | Status                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **Molotov Cocktail**  | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                                                               | Playable, iterating on polish                    |
+| **ZoneLink**          | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental))                                               | Tier A ghost verified                            |
+| **ZoneXM**            | Conversation awareness for your own music — ducks Windows audio when the Zone demands attention ([details](#zonexm--conversation-awareness-for-external-music)) | Working: gunfire, mutants, dialogue              |
 | **ZoneStash**         | Quest-item transfers through personal stash context menus ([details](#zonestash--quest-items-in-personal-stashes))                                              | Personal-stash deposit/retrieval verified by Ian |
-| **English Zone port** | Workshop English signage mod ported from UE 5.1 to 2.1.0 / UE 5.5 ([details](mods/english-zone/README.md))                                                      | 471 assets, in-game verified                   |
+| **English Zone port** | Workshop English signage mod ported from UE 5.1 to 2.1.0 / UE 5.5 ([details](mods/english-zone/README.md))                                                      | 471 assets, in-game verified                     |
 
 ## Layout
 
@@ -266,9 +266,9 @@ Play your own music over the game; ZoneXM ducks it — every app except the game
 fraction of its own volume — whenever the Zone needs your ears, and fades it back when the
 dust settles. Two cooperating halves joined by a flag file:
 
-| Half     | Lives in                                                                                           | Does                                                                                                    |
-| -------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Sensor   | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)                                 | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\ZoneXM\alert.flag` alive while it lasts            |
+| Half      | Lives in                                                                       | Does                                                                                                                   |
+| --------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Sensor    | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)             | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\ZoneXM\alert.flag` alive while it lasts                           |
 | Companion | [ZoneXM Companion](mods/zonexm/src/ZoneXM.Notifications/) (native Windows app) | Polls the flag, ducks per-app CoreAudio session volumes, restores them, and optionally forwards selected notifications |
 
 ### Player setup (planned Microsoft Store release)
