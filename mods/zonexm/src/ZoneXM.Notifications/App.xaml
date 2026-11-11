@@ -1,0 +1,42 @@
+<Application
+    x:Class="ZoneXM.Notifications.BridgeApplication"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <controls:XamlControlsResources />
+            </ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="SubtitleTitleBrush" Color="#FFD45A" />
+                    <SolidColorBrush x:Key="SubtitleBodyBrush" Color="#F6F6F3" />
+                    <SolidColorBrush x:Key="SubtitleShadowBrush" Color="#CC000000" />
+                    <SolidColorBrush x:Key="CompanionBackgroundBrush" Color="#171916" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="SubtitleTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="SubtitleBodyBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="SubtitleShadowBrush" Color="Transparent" />
+                    <SolidColorBrush x:Key="CompanionBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+            <Style TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Bahnschrift" />
+                <Setter Property="Foreground" Value="{ThemeResource SubtitleBodyBrush}" />
+            </Style>
+            <Style x:Key="SubtitleTitleStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Bahnschrift" />
+                <Setter Property="Foreground" Value="{ThemeResource SubtitleTitleBrush}" />
+            </Style>
+            <Style x:Key="SubtitleShadowStyle" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Bahnschrift" />
+                <Setter Property="Foreground" Value="{ThemeResource SubtitleShadowBrush}" />
+            </Style>
+            <Style x:Key="CompanionShellStyle" TargetType="Grid">
+                <Setter Property="Background" Value="{ThemeResource CompanionBackgroundBrush}" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

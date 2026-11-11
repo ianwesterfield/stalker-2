@@ -1,14 +1,21 @@
 # Bulk extracts/decodes of original game data — regenerate from the game files
 extracted/
 
-# Packed output staging (final .pak is reproducible from mod/ + scripts/)
+# Packed output staging (final paks are reproducible from mods/*/ + scripts)
 build/
 
 # Asset pipeline build artifacts — pipeline.ps1 regenerates everything here
-asset-pipeline/out/
+mods/molotov-cocktail/asset-pipeline/out/
+
+# Vanilla game assets (export with FModel) and generated files that embed vanilla data
+mods/molotov-cocktail/asset-pipeline/ref/
+*.locres
 
 __pycache__/
 *.bak
 Thumbs.db
 
 captures/
+
+bin/
+obj/
