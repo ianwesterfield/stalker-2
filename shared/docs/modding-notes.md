@@ -33,8 +33,8 @@ this is the _how_ and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS
   and item ownership matches backpack/stash. Other menu bytes and item flags stay unchanged.
   The existing native action handler at `0x3405B48` performs the transfer. No item cloning,
   global de-questing, or native instruction patching. Only one verified vtable slot changes.
-- Policy/memory-fixture tests and unsupported-host rejection pass. On 2026-11-06 the
-  user successfully deposited and retrieved their quest items, including storing Skif's
+- Policy/memory-fixture tests and unsupported-host rejection pass. On 2026-11-06
+  Ian successfully deposited and retrieved quest items, including storing Skif's
   pistol. The log confirms native activation and deposit/retrieval menu overrides; the
   supplied storage screenshot retains the pistol's protection icon. Persistence,
   other-container negative cases, and quest progression remain live-test requirements.
@@ -298,7 +298,7 @@ cooks (stale pak cache).
 - Live validation (2026-11-05): the original wrapper, direct text-block updates, explicit
   font/visibility, and a higher viewport layer all rendered in a bounded diagnostic probe.
   A subsequent real synthetic Windows toast also rendered through the normal Lua reader,
-  confirmed visually by the user. "Banner shown" logs alone are not visual verification;
+  confirmed visually by Ian. "Banner shown" logs alone are not visual verification;
   do not assume a missing banner means the widget is inherently invisible.
 - The requested presentation is now a bottom-right, compact `+1` quest-style banner.
   A/B testing showed nonzero viewport anchors read back as `(0,0)` despite successful
@@ -367,10 +367,10 @@ cooks (stale pak cache).
   Keep event deduplication independent of media-track deduplication and track the
   currently displayed widget's key separately when changing sources.
 - The listener exposes Notification Center entries, not "a banner was shown" events:
-  Do Not Disturb and per-app banner suppression are not an equivalent filter. The user
+  Do Not Disturb and per-app banner suppression are not an equivalent filter. Ian
   explicitly chose new Notification Center entries as the prototype's forwarding policy.
   Baseline the current list on startup/resume; never replay existing notification history.
-- The user chose to show banners regardless of combat/dialogue/bark danger state; only pause or
+- Ian chose to show banners regardless of combat/dialogue/bark danger state; only pause or
   a missing player defers them. Danger still drives audio ducking. A Pandora notification was
   missed when forwarding had to be restarted manually and could stop after a transient
   `0x80070005` read: the helper now auto-resumes when permission is already granted and retries

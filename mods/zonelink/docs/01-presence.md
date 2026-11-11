@@ -323,7 +323,7 @@ model normally feeds it, kinematic actors must write it per tick; anim instance 
 **Sessions 10-12 — P-7 PROVEN.** `StateData` writes land (`gait=ok`) but the model stomps them
 every anim update — abandoned, removed. Working gait path: **dynamic montage on `DefaultSlot`**
 (`PlaySlotAnimationAsDynamicMontage`, walk cycle `AS_tp_ar_combat_walk_fwd`, loop 9999, play
-rate = cmd speed / authored speed clamped 0.6–1.8). User verdict: "wow, I think that worked" —
+rate = cmd speed / authored speed clamped 0.6–1.8). Ian's verdict: "wow, I think that worked" —
 puppet tails at 10 m standoff with real walk animation. Gotcha: standoff ring needs
 **hysteresis** (close >11 m, halt <9.5 m) — a hard threshold start/stops the montage every few
 ticks ("shivering midstep", phantom walk bursts). Production choice deferred to Tier B: native

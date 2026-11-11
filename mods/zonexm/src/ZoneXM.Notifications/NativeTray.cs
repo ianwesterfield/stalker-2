@@ -29,10 +29,17 @@ internal sealed class NativeTray : IDisposable
         if (taskbarCreated == 0) throw new Win32Exception();
         var image = LoadImage(0, Path.Combine(AppContext.BaseDirectory, "Assets", "Tray.ico"), 1, 0, 0, 0x10);
         if (image == 0) throw new Win32Exception();
-        icon = new NotifyIconData {
-            Size = (uint)Marshal.SizeOf<NotifyIconData>(), Window = window, Id = 1,
-            Flags = 1 | 2 | 4 | 0x80, Callback = CallbackMessage, Icon = image,
-            Tip = "ZoneXM - double-click to open; right-click to exit", Info = "", InfoTitle = ""
+        icon = new NotifyIconData
+        {
+            Size = (uint)Marshal.SizeOf<NotifyIconData>(),
+            Window = window,
+            Id = 1,
+            Flags = 1 | 2 | 4 | 0x80,
+            Callback = CallbackMessage,
+            Icon = image,
+            Tip = "ZoneXM",
+            Info = "",
+            InfoTitle = ""
         };
         if (!SetWindowSubclass(window, callback, 1, 0))
         {

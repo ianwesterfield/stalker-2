@@ -31,50 +31,41 @@ if ($IdentityName -or $Publisher -or $PublisherDisplayName -or $Version) {
   $manifest.Save("$stage\AppxManifest.xml")
 }
 $null = New-Item -ItemType Directory -Path "$stage\Assets" -Force
+$assets = Join-Path (Split-Path $PSScriptRoot -Parent) 'assets'
+Copy-Item "$assets\companion\*" "$stage\Assets" -Force
+$null = New-Item -ItemType Directory -Path "$stage\Assets\Fonts" -Force
+foreach ($family in @('BarlowCondensed', 'IBMPlexSans', 'IBMPlexMono')) {
+  Copy-Item "$assets\fonts\$family" "$stage\Assets\Fonts" -Recurse -Force
+}
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'make-zonexm-headings.ps1') -OutputDirectory "$stage\Assets\Headings"
+if ($LASTEXITCODE -ne 0) { throw 'Heading artwork generation failed' }
 Add-Type -AssemblyName System.Drawing
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-public static class ZoneXMIcon {
-  [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr icon);
-}
-'@
-$original = [Drawing.Image]::FromFile((Join-Path $PSScriptRoot 'zonexm.png'))
-try {
-  foreach ($item in @(@('StoreLogo', 50), @('Square44x44Logo', 44), @('Square150x150Logo', 150))) {
-    $bitmap = [Drawing.Bitmap]::new($original, [int]$item[1], [int]$item[1])
-    try { $bitmap.Save("$stage\Assets\$($item[0]).png", [Drawing.Imaging.ImageFormat]::Png) }
-  finally { $bitmap.Dispose() }
-  }
-}
-finally { $original.Dispose() }
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'make-zonexm-background.ps1') -OutputDirectory "$stage\Assets"
-if ($LASTEXITCODE -ne 0) { throw 'Background art generation failed' }
-$trayArt = [Drawing.Image]::FromFile("$stage\Assets\RadiationIcon.png")
-try {
-  $bitmap = [Drawing.Bitmap]::new(32, 32)
+foreach ($item in @(@('StoreLogo', 50, 64), @('Square44x44Logo', 44, 48), @('Square150x150Logo', 150, 256))) {
+  $original = [Drawing.Image]::FromFile("$assets\companion\Icon-$($item[2]).png")
   try {
-    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    $size = [int]$item[1]
+    $bitmap = [Drawing.Bitmap]::new($size, $size)
     try {
-      $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-      $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-      $graphics.DrawImage($trayArt, 0, 0, 32, 32)
+      $graphics = [Drawing.Graphics]::FromImage($bitmap)
+      try {
+        $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.DrawImage($original, 0, 0, $size, $size)
+      }
+      finally { $graphics.Dispose() }
+      $bitmap.Save("$stage\Assets\$($item[0]).png", [Drawing.Imaging.ImageFormat]::Png)
     }
-    finally { $graphics.Dispose() }
-    $handle = $bitmap.GetHicon()
-    try {
-      $icon = [Drawing.Icon]::FromHandle($handle)
-      $stream = [IO.File]::Create("$stage\Assets\Tray.ico")
-      try { $icon.Save($stream) } finally { $stream.Dispose(); $icon.Dispose() }
-    }
-    finally { $null = [ZoneXMIcon]::DestroyIcon($handle) }
+    finally { $bitmap.Dispose() }
   }
-  finally { $bitmap.Dispose() }
+  finally { $original.Dispose() }
 }
-finally { $trayArt.Dispose() }
+foreach ($size in @(16, 20, 24, 32, 40, 48, 64, 96, 128, 256)) {
+  Copy-Item "$assets\companion\Icon-$size.png" "$stage\Assets\Square44x44Logo.targetsize-$size.png" -Force
+  Copy-Item "$assets\companion\Icon-$size.png" "$stage\Assets\Square44x44Logo.targetsize-${size}_altform-unplated.png" -Force
+}
 $sdk = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory |
-  Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' -and (Test-Path "$($_.FullName)\x64\makeappx.exe") } |
-  Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' -and (Test-Path "$($_.FullName)\x64\makeappx.exe") } |
+Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
 if (-not $sdk) { throw 'Windows SDK MakeAppx is required to validate/package the companion' }
 $packOutput = & "$($sdk.FullName)\x64\makeappx.exe" pack /d $stage /p "$stage.msix" /o 2>&1
 if ($LASTEXITCODE -ne 0) { $packOutput | Write-Host; throw 'MSIX validation/packaging failed' }

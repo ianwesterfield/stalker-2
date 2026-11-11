@@ -1,52 +1,344 @@
 <Application
     x:Class="ZoneXM.Notifications.BridgeApplication"
+    RequestedTheme="Dark"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <controls:XamlControlsResources />
+                <controls:XamlControlsResources/>
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Default">
-                    <SolidColorBrush x:Key="SubtitleTitleBrush" Color="#FFD45A" />
-                    <SolidColorBrush x:Key="SubtitleBodyBrush" Color="#F6F6F3" />
-                    <SolidColorBrush x:Key="SubtitleShadowBrush" Color="#CC000000" />
-                    <ImageBrush x:Key="CompanionBackgroundBrush" ImageSource="ms-appx:///Assets/Background.png" Stretch="UniformToFill" />
-                    <AcrylicBrush x:Key="CompanionGlassBrush" TintColor="#1C1E1C" TintOpacity="0.35" TintLuminosityOpacity="0.45" FallbackColor="#E62A2C2A" />
-                    <AcrylicBrush x:Key="TabViewItemHeaderBackgroundSelected" TintColor="#1C1E1C" TintOpacity="0.35" TintLuminosityOpacity="0.45" FallbackColor="#E62A2C2A" />
-                    <SolidColorBrush x:Key="CompanionGlassBorderBrush" Color="#38FFFFFF" />
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="SubtitleTitleBrush"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="TexturedTitleTextBrush"
+                            Color="Transparent"/>
+                    <SolidColorBrush x:Key="SubtitleBodyBrush"
+                                     Color="#F0ECE3"/>
+                    <SolidColorBrush x:Key="CompanionSecondaryBrush"
+                                     Color="#BEC0B8"/>
+                    <SolidColorBrush x:Key="CompanionSignalBrush"
+                                     Color="#72BDD1"/>
+                    <SolidColorBrush x:Key="CompanionCanvasBrush"
+                                     Color="#141715"/>
+                    <SolidColorBrush x:Key="CompanionFocusBrush"
+                                     Color="#FFD16C"/>
+                    <x:Double x:Key="CompanionDecorationOpacity">1</x:Double>
+                    <ImageBrush x:Key="CompanionBackgroundBrush"
+                                ImageSource="ms-appx:///Assets/Background.png"
+                                Opacity="0.22"
+                                Stretch="UniformToFill"/>
+                    <ImageBrush x:Key="CompanionMetalBrush"
+                                ImageSource="ms-appx:///Assets/dark_oxidized_metal_tile_512.png"
+                                Opacity="0.25"
+                                Stretch="UniformToFill"/>
+                    <ImageBrush x:Key="CompanionGrainBrush"
+                                ImageSource="ms-appx:///Assets/fine_grain_overlay_512.png"
+                                Opacity="0.08"
+                                Stretch="UniformToFill"/>
+                    <ImageBrush x:Key="CompanionRustBrush"
+                                ImageSource="ms-appx:///Assets/rust_patina_overlay_512.png"
+                                Opacity="0.14"
+                                Stretch="UniformToFill"/>
+                    <AcrylicBrush x:Key="CompanionGlassBrush"
+                                  TintColor="#202421"
+                                  Opacity="0.75"
+                                  TintOpacity="0.35"
+                                  TintLuminosityOpacity="0.45"
+                                  FallbackColor="#E6202421"/>
+                    <AcrylicBrush x:Key="TabViewItemHeaderBackgroundSelected"
+                                  TintColor="#282C29"
+                                  Opacity="0.75"
+                                  TintOpacity="0.35"
+                                  TintLuminosityOpacity="0.45"
+                                  FallbackColor="#E6282C29"/>
+                    <SolidColorBrush x:Key="CompanionGlassBorderBrush"
+                                     Color="#585348"/>
+                    <SolidColorBrush x:Key="TabViewItemHeaderForegroundSelected"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="TabViewItemHeaderForeground"
+                                     Color="#BEC0B8"/>
+                    <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPointerOver"
+                                     Color="#282C29"/>
+                    <SolidColorBrush x:Key="ButtonBackground"
+                                     Color="#282C29"/>
+                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver"
+                                     Color="#363B35"/>
+                    <SolidColorBrush x:Key="ButtonBackgroundPressed"
+                                     Color="#202421"/>
+                    <SolidColorBrush x:Key="ButtonBackgroundDisabled"
+                                     Color="#202421"/>
+                    <SolidColorBrush x:Key="ButtonForeground"
+                                     Color="#F0ECE3"/>
+                    <SolidColorBrush x:Key="ButtonForegroundPointerOver"
+                                     Color="#F0ECE3"/>
+                    <SolidColorBrush x:Key="ButtonForegroundPressed"
+                                     Color="#F0ECE3"/>
+                    <SolidColorBrush x:Key="ButtonForegroundDisabled"
+                                     Color="#A5A9A0"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrush"
+                                     Color="#585348"/>
+                    <SolidColorBrush x:Key="SliderThumbBackground"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver"
+                                     Color="#F2C15A"/>
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPressed"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="SliderTrackValueFill"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver"
+                                     Color="#F2C15A"/>
+                    <SolidColorBrush x:Key="SliderTrackValueFillPressed"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="SliderTrackFill"
+                                     Color="#585348"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver"
+                                     Color="#F2C15A"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed"
+                                     Color="#E6AD38"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked"
+                                     Color="#141715"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver"
+                                     Color="#141715"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed"
+                                     Color="#141715"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="HighContrast">
-                    <SolidColorBrush x:Key="SubtitleTitleBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                    <SolidColorBrush x:Key="SubtitleBodyBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
-                    <SolidColorBrush x:Key="SubtitleShadowBrush" Color="Transparent" />
-                    <SolidColorBrush x:Key="CompanionBackgroundBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                    <SolidColorBrush x:Key="CompanionGlassBrush" Color="{ThemeResource SystemColorWindowColor}" />
-                    <SolidColorBrush x:Key="CompanionGlassBorderBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                    <SolidColorBrush x:Key="SubtitleTitleBrush"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="TexturedTitleTextBrush"
+                            Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="SubtitleBodyBrush"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="CompanionSecondaryBrush"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="CompanionSignalBrush"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="CompanionCanvasBrush"
+                                     Color="{ThemeResource SystemColorWindowColor}"/>
+                    <SolidColorBrush x:Key="CompanionFocusBrush"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <x:Double x:Key="CompanionDecorationOpacity">0</x:Double>
+                    <SolidColorBrush x:Key="CompanionBackgroundBrush"
+                                     Color="Transparent"/>
+                    <SolidColorBrush x:Key="CompanionMetalBrush"
+                                     Color="Transparent"/>
+                    <SolidColorBrush x:Key="CompanionGrainBrush"
+                                     Color="Transparent"/>
+                    <SolidColorBrush x:Key="CompanionRustBrush"
+                                     Color="Transparent"/>
+                    <SolidColorBrush x:Key="CompanionGlassBrush"
+                                     Color="{ThemeResource SystemColorWindowColor}"/>
+                    <SolidColorBrush x:Key="CompanionGlassBorderBrush"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="TabViewItemHeaderBackgroundSelected"
+                                     Color="{ThemeResource SystemColorWindowColor}"/>
+                    <SolidColorBrush x:Key="TabViewItemHeaderForegroundSelected"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="TabViewItemHeaderForeground"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="TabViewItemHeaderBackgroundPointerOver"
+                                     Color="{ThemeResource SystemColorWindowColor}"/>
+                    <SolidColorBrush x:Key="ButtonBackground"
+                                     Color="{ThemeResource SystemColorButtonFaceColor}"/>
+                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="ButtonBackgroundPressed"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="ButtonBackgroundDisabled"
+                                     Color="{ThemeResource SystemColorButtonFaceColor}"/>
+                    <SolidColorBrush x:Key="ButtonForeground"
+                                     Color="{ThemeResource SystemColorButtonTextColor}"/>
+                    <SolidColorBrush x:Key="ButtonForegroundPointerOver"
+                                     Color="{ThemeResource SystemColorHighlightTextColor}"/>
+                    <SolidColorBrush x:Key="ButtonForegroundPressed"
+                                     Color="{ThemeResource SystemColorHighlightTextColor}"/>
+                    <SolidColorBrush x:Key="ButtonForegroundDisabled"
+                                     Color="{ThemeResource SystemColorGrayTextColor}"/>
+                    <SolidColorBrush x:Key="ButtonBorderBrush"
+                                     Color="{ThemeResource SystemColorButtonTextColor}"/>
+                    <SolidColorBrush x:Key="SliderThumbBackground"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPressed"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="SliderTrackValueFill"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="SliderTrackValueFillPressed"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="SliderTrackFill"
+                                     Color="{ThemeResource SystemColorWindowTextColor}"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillCheckedPressed"
+                                     Color="{ThemeResource SystemColorHighlightColor}"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundChecked"
+                                     Color="{ThemeResource SystemColorHighlightTextColor}"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver"
+                                     Color="{ThemeResource SystemColorHighlightTextColor}"/>
+                    <SolidColorBrush x:Key="CheckBoxCheckGlyphForegroundCheckedPressed"
+                                     Color="{ThemeResource SystemColorHighlightTextColor}"/>
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+            <FontFamily x:Key="CompanionDisplayFont">ms-appx:///Assets/Fonts/BarlowCondensed/BarlowCondensed-Bold.ttf#Barlow Condensed</FontFamily>
+            <FontFamily x:Key="CompanionTabFont">ms-appx:///Assets/Fonts/BarlowCondensed/BarlowCondensed-SemiBold.ttf#Barlow Condensed SemiBold</FontFamily>
+            <FontFamily x:Key="CompanionBodyFont">ms-appx:///Assets/Fonts/IBMPlexSans/IBMPlexSans-Regular.ttf#IBM Plex Sans</FontFamily>
+            <FontFamily x:Key="CompanionLabelFont">ms-appx:///Assets/Fonts/IBMPlexSans/IBMPlexSans-Medium.ttf#IBM Plex Sans Medm</FontFamily>
+            <FontFamily x:Key="CompanionTechnicalFont">ms-appx:///Assets/Fonts/IBMPlexMono/IBMPlexMono-Regular.ttf#IBM Plex Mono</FontFamily>
             <Style TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="Bahnschrift" />
-                <Setter Property="Foreground" Value="{ThemeResource SubtitleBodyBrush}" />
+                <Setter Property="FontFamily"
+                        Value="{StaticResource CompanionBodyFont}"/>
+                <Setter Property="FontSize"
+                        Value="14"/>
+                <Setter Property="LineHeight"
+                        Value="20"/>
+                <Setter Property="Foreground"
+                        Value="{ThemeResource SubtitleBodyBrush}"/>
             </Style>
-            <Style x:Key="SubtitleTitleStyle" TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="Bahnschrift" />
-                <Setter Property="Foreground" Value="{ThemeResource SubtitleTitleBrush}" />
+            <Style x:Key="SubtitleTitleStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontFamily"
+                        Value="{StaticResource CompanionDisplayFont}"/>
+                <Setter Property="FontWeight"
+                        Value="Bold"/>
+                <Setter Property="Foreground"
+                        Value="{ThemeResource SubtitleTitleBrush}"/>
             </Style>
-            <Style x:Key="SubtitleShadowStyle" TargetType="TextBlock">
-                <Setter Property="FontFamily" Value="Bahnschrift" />
-                <Setter Property="Foreground" Value="{ThemeResource SubtitleShadowBrush}" />
+            <Style x:Key="TexturedSubtitleTitleStyle"
+                   TargetType="TextBlock"
+                   BasedOn="{StaticResource SubtitleTitleStyle}">
+                <Setter Property="Foreground"
+                        Value="{ThemeResource TexturedTitleTextBrush}"/>
             </Style>
-            <Style x:Key="CompanionShellStyle" TargetType="Grid">
-                <Setter Property="Background" Value="{ThemeResource CompanionBackgroundBrush}" />
+            <Style x:Key="CompanionTabStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontFamily"
+                        Value="{StaticResource CompanionTabFont}"/>
+                <Setter Property="FontWeight"
+                        Value="SemiBold"/>
+                <Setter Property="FontSize"
+                        Value="17"/>
             </Style>
-            <Style x:Key="CompanionGlassStyle" TargetType="Border">
-                <Setter Property="Background" Value="{ThemeResource CompanionGlassBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource CompanionGlassBorderBrush}" />
-                <Setter Property="BorderThickness" Value="1" />
-                <Setter Property="CornerRadius" Value="0,8,8,8" />
+            <Style x:Key="CompanionButtonLabelStyle"
+                   TargetType="TextBlock">
+                <Setter Property="TextWrapping"
+                        Value="Wrap"/>
+            </Style>
+            <Style x:Key="CompanionTechnicalStyle"
+                   TargetType="TextBlock">
+                <Setter Property="FontFamily"
+                        Value="{StaticResource CompanionTechnicalFont}"/>
+                <Setter Property="FontSize"
+                        Value="12"/>
+                <Setter Property="LineHeight"
+                        Value="17"/>
+                <Setter Property="TextWrapping"
+                        Value="Wrap"/>
+                <Setter Property="Foreground"
+                        Value="{ThemeResource CompanionSecondaryBrush}"/>
+            </Style>
+            <Style x:Key="CompanionTelemetryStyle"
+                   TargetType="TextBlock"
+                   BasedOn="{StaticResource CompanionTechnicalStyle}">
+                <Setter Property="Foreground"
+                        Value="{ThemeResource CompanionSignalBrush}"/>
+            </Style>
+            <Style TargetType="Button"
+                   BasedOn="{StaticResource DefaultButtonStyle}">
+                <Setter Property="FontFamily"
+                        Value="{StaticResource CompanionLabelFont}"/>
+                <Setter Property="FontSize"
+                        Value="13"/>
+                <Setter Property="CornerRadius"
+                        Value="5"/>
+                <Setter Property="FocusVisualPrimaryBrush"
+                        Value="{ThemeResource CompanionFocusBrush}"/>
+                <Setter Property="FocusVisualPrimaryThickness"
+                        Value="2"/>
+            </Style>
+            <Style TargetType="CheckBox"
+                   BasedOn="{StaticResource DefaultCheckBoxStyle}">
+                <Setter Property="FontFamily"
+                        Value="{StaticResource CompanionLabelFont}"/>
+                <Setter Property="FontSize"
+                        Value="14"/>
+                <Setter Property="Foreground"
+                        Value="{ThemeResource SubtitleBodyBrush}"/>
+                <Setter Property="HorizontalAlignment"
+                        Value="Stretch"/>
+                <Setter Property="HorizontalContentAlignment"
+                        Value="Stretch"/>
+                <Setter Property="FocusVisualPrimaryBrush"
+                        Value="{ThemeResource CompanionFocusBrush}"/>
+                <Setter Property="FocusVisualPrimaryThickness"
+                        Value="2"/>
+            </Style>
+            <Style TargetType="Slider"
+                   BasedOn="{StaticResource DefaultSliderStyle}">
+                <Setter Property="FocusVisualPrimaryBrush"
+                        Value="{ThemeResource CompanionFocusBrush}"/>
+                <Setter Property="FocusVisualPrimaryThickness"
+                        Value="2"/>
+            </Style>
+            <Style x:Key="CompanionBrandStyle"
+                   TargetType="Image">
+                <Setter Property="Opacity"
+                        Value="{ThemeResource CompanionDecorationOpacity}"/>
+                <Setter Property="IsHitTestVisible"
+                        Value="False"/>
+                <Setter Property="AutomationProperties.AccessibilityView"
+                        Value="Raw"/>
+            </Style>
+            <Style x:Key="CompanionBackdropStyle"
+                   TargetType="Border">
+                <Setter Property="Background"
+                        Value="{ThemeResource CompanionBackgroundBrush}"/>
+                <Setter Property="IsHitTestVisible"
+                        Value="False"/>
+                <Setter Property="AutomationProperties.AccessibilityView"
+                        Value="Raw"/>
+            </Style>
+            <Style x:Key="CompanionGrainStyle"
+                   TargetType="Border"
+                   BasedOn="{StaticResource CompanionBackdropStyle}">
+                <Setter Property="Background"
+                        Value="{ThemeResource CompanionGrainBrush}"/>
+            </Style>
+            <Style x:Key="CompanionRustStyle"
+                   TargetType="Border"
+                   BasedOn="{StaticResource CompanionBackdropStyle}">
+                <Setter Property="Background"
+                        Value="{ThemeResource CompanionRustBrush}"/>
+            </Style>
+            <Style x:Key="CompanionHeaderStyle"
+                   TargetType="Grid">
+                <Setter Property="Background"
+                        Value="{ThemeResource CompanionMetalBrush}"/>
+            </Style>
+            <Style x:Key="CompanionShellStyle"
+                   TargetType="Grid">
+                <Setter Property="Background"
+                        Value="{ThemeResource CompanionCanvasBrush}"/>
+            </Style>
+            <Style x:Key="CompanionGlassStyle"
+                   TargetType="Border">
+                <Setter Property="Background"
+                        Value="{ThemeResource CompanionGlassBrush}"/>
+                <Setter Property="BorderBrush"
+                        Value="{ThemeResource CompanionGlassBorderBrush}"/>
+                <Setter Property="BorderThickness"
+                        Value="1"/>
+                <Setter Property="CornerRadius"
+                        Value="0,8,8,8"/>
             </Style>
         </ResourceDictionary>
     </Application.Resources>

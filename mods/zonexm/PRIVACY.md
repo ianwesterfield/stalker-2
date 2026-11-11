@@ -9,13 +9,15 @@ explains what the app accesses and what it does with it.
 
 - The app works entirely on your PC. It has **no network code**: it sends nothing to the
   developer or anyone else, and contains no analytics, telemetry, advertising or crash reporting.
-- Nothing is collected, sold or shared.
+- No data is sent to the developer, sold, or shared over the network. The app processes
+  data locally and temporarily shares selected notification text with the game mod as described below.
 
 ## What the app accesses
 
 **Notifications (only with your permission).** Windows asks you to allow notification access
-before the app can read anything. Forwarding is opt-in per app, and no apps are selected by
-default. For apps you select, the app reads the newest notification's app name, title and body
+before the app can read notifications. This permission exposes Notification Center entries broadly;
+forwarding is opt-in per app, and no apps are selected by default. For apps you select,
+the app forwards a new notification's app name, title and body
 and writes them to a local file so the game mod can show them as an in-game banner. Notifications
 from unselected apps are not forwarded. You can revoke access at any time in
 **Windows Settings > Privacy & security > Notifications**.
@@ -28,15 +30,20 @@ not record or listen to audio.
 
 All files live in `%LOCALAPPDATA%\ZoneXM` on your PC:
 
-| File                   | Contents                                                                 | Kept                                                     |
-| ---------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------- |
-| `helper-settings.json` | Duck level and the IDs of apps you opted in                              | Until you change or delete it                            |
-| `notification.txt`     | The latest forwarded notification (app name, title, body) for the game   | Overwritten by the next one; cleared on pause or exit    |
-| `alert.flag`           | Written by the game mod while ducking is needed; no personal data        | Refreshed while the game runs                            |
-| `subtitle-style.txt`   | Written by the game mod: subtitle font and colour settings; no personal data | Until deleted                                        |
+| File                   | Contents                                                                     | Kept                                                  |
+| ---------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `helper-settings.json` | Duck level and the IDs of apps you opted in                                  | Until you change or delete it                         |
+| `notification.txt`     | The latest forwarded notification (app name, title, body) for the game       | Overwritten; cleared on expiry, pause or normal exit |
+| `alert.flag`           | Written by the game mod while ducking is needed; no personal data            | Refreshed while the game runs                         |
+| `subtitle-style.txt`   | Written by the game mod: subtitle font and colour settings; no personal data | Until deleted                                         |
 
 The in-app activity log is kept in memory only, never includes notification titles or bodies, and
 is discarded when the app closes.
+
+The shared notification file is plaintext, not encrypted. Other programs running as your Windows
+account can read it, and people watching your screen or stream can see in-game banners. A crash or
+forced termination can leave an expired file behind; the game ignores stale entries. Original
+Windows notifications are never modified or dismissed by the app.
 
 Because the game mod must read these files, Windows keeps the folder when the app is uninstalled.
 Delete `%LOCALAPPDATA%\ZoneXM` to remove everything.

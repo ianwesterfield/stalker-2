@@ -1,0 +1,39 @@
+<UserControl
+  x:Class="ZoneXM.Notifications.TitleLogo"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  HorizontalAlignment="Left">
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="LogoWhiteBrush"
+              Color="#E9E1CB"/>
+          <SolidColorBrush x:Key="LogoYellowBrush"
+              Color="#F0AE19"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+          <SolidColorBrush x:Key="LogoWhiteBrush"
+              Color="{ThemeResource SystemColorWindowTextColor}"/>
+          <SolidColorBrush x:Key="LogoYellowBrush"
+              Color="{ThemeResource SystemColorWindowTextColor}"/>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </UserControl.Resources>
+  <Grid>
+    <TextBlock x:Name="Lettering"
+               FontFamily="{StaticResource CompanionDisplayFont}"
+               FontWeight="Bold"
+               FontSize="32"
+               LineHeight="0"
+               TextWrapping="Wrap"
+               AutomationProperties.Name="ZoneXM"><Run Text="ZONE"
+          Foreground="{ThemeResource LogoWhiteBrush}"/><Run Text="XM"
+          Foreground="{ThemeResource LogoYellowBrush}"/></TextBlock>
+    <Grid x:Name="WearLayer"
+          IsHitTestVisible="False"
+          AutomationProperties.AccessibilityView="Raw"
+          Opacity="{ThemeResource CompanionDecorationOpacity}"/>
+  </Grid>
+</UserControl>

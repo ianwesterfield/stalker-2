@@ -10,6 +10,7 @@
     <AppxPackage>false</AppxPackage>
     <WindowsPackageType>None</WindowsPackageType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\companion\App.ico</ApplicationIcon>
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -22,6 +23,7 @@
   <Target Name="PublishApplicationXaml" BeforeTargets="ComputeFilesToPublish">
     <ItemGroup>
       <ResolvedFileToPublish Include="$(TargetDir)App.xbf" RelativePath="App.xbf" CopyToPublishDirectory="PreserveNewest" />
+      <ResolvedFileToPublish Include="$(TargetDir)TitleLogo.xbf" RelativePath="TitleLogo.xbf" CopyToPublishDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 </Project>

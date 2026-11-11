@@ -7,7 +7,7 @@ Projects here:
 | **Molotov Cocktail**  | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                                                               | Playable, iterating on polish                  |
 | **ZoneLink**          | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental))                                               | Tier A ghost verified                          |
 | **ZoneXM**            | Conversation awareness for your own music — ducks Windows audio when the Zone demands attention ([details](#zonexm--conversation-awareness-for-external-music)) | Working: gunfire, mutants, dialogue            |
-| **ZoneStash**         | Quest-item transfers through personal stash context menus ([details](#zonestash--quest-items-in-personal-stashes))                                              | Personal-stash deposit/retrieval user-verified |
+| **ZoneStash**         | Quest-item transfers through personal stash context menus ([details](#zonestash--quest-items-in-personal-stashes))                                              | Personal-stash deposit/retrieval verified by Ian |
 | **English Zone port** | Workshop English signage mod ported from UE 5.1 to 2.1.0 / UE 5.5 ([details](mods/english-zone/README.md))                                                      | 471 assets, in-game verified                   |
 
 ## Layout
@@ -19,7 +19,8 @@ shared/tools/     bin2cfg, make_locres, find_guobjectarray, Lua test harness
 shared/docs/      cross-mod modding notes
 ```
 
-Only pipeline logic and docs are committed. Game data (`extracted/`), vanilla reference
+Source code, pipeline logic, docs, and the companion's supplied artwork/licensed fonts are committed.
+Game data (`extracted/`), vanilla reference
 assets, generated locres and all build output (`build/`, `bin/`, `obj/`, `out/`) are
 regenerated locally. Run scripts from the repo root.
 
@@ -34,7 +35,7 @@ Equipped items must be unequipped first.
 
 **Test on a separate manual save.** Quests may require an item in your backpack, not in
 storage. Retrieve it before continuing the quest. Quest-item deposit and retrieval were
-user-verified on 2026-11-06, including storing Skif's pistol; the storage screenshot still
+verified by Ian on 2026-11-06, including storing Skif's pistol; the storage screenshot still
 shows its protection icon. Save/reload persistence and quest progression remain unverified.
 
 ```powershell
@@ -265,12 +266,31 @@ Play your own music over the game; ZoneXM ducks it — every app except the game
 fraction of its own volume — whenever the Zone needs your ears, and fades it back when the
 dust settles. Two cooperating halves joined by a flag file:
 
-| Half     | Lives in                                                                                           | Does                                                                                                        |
-| -------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Sensor   | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)                                 | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\ZoneXM\alert.flag` alive while it lasts                |
-| Watchdog | [mods/zonexm/scripts/zonexm-watchdog.ps1](mods/zonexm/scripts/zonexm-watchdog.ps1) (PowerShell 7+) | Polls the flag, ducks per-app CoreAudio session volumes, tray icon shows armed/ducked, restores exactly     |
+| Half     | Lives in                                                                                           | Does                                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Sensor   | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)                                 | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\ZoneXM\alert.flag` alive while it lasts            |
+| Companion | [ZoneXM Companion](mods/zonexm/src/ZoneXM.Notifications/) (native Windows app) | Polls the flag, ducks per-app CoreAudio session volumes, restores them, and optionally forwards selected notifications |
 
-### Now-playing banners (prototype)
+### Player setup (planned Microsoft Store release)
+
+The companion is not published in the Store yet. The intended player setup is:
+
+1. Install UE4SS and extract the matching Steam or Game Pass ZoneXM mod archive into the game folder.
+2. Install **ZoneXM Companion** from the Microsoft Store and launch it before playing.
+3. Optionally allow Windows notification access and select the apps whose notifications should appear in game.
+
+Audio ducking does not require notification permission. The companion includes its .NET and
+Windows App SDK runtimes: players will not need an SDK, PowerShell 7, a terminal command,
+Developer Mode, or a manually trusted certificate for the Store installation. The game mod
+and UE4SS remain separate prerequisites; the companion does not install them or start at logon.
+The PowerShell commands below are developer or legacy workflows, not companion installation steps.
+
+### Now-playing banners (legacy script prototype)
+
+GSMTC now-playing support is not yet integrated into the companion. This optional prototype
+still uses PowerShell; it is not required for native audio ducking or Notification Center banners.
+The recommended Store release path is to port this small read-only bridge into the companion
+before advertising media-session banners, rather than require players to run another script.
 
 The watchdog also launches the read-only [Windows media bridge](mods/zonexm/scripts/zonexm-media.ps1).
 It reads Windows Global System Media Transport Controls (GSMTC), not a Pandora-specific
@@ -350,11 +370,13 @@ fields are reversed for display so the artist is yellow and the song is white. O
 retain title/body order. The media-session path uses its explicit artist/song metadata.
 This is an independent styled widget, not an actual quest completion or reward.
 
-The helper uses **WinUI 3 / Windows App SDK with Fluent controls**, not WPF or WinForms, over a
-generated gray steel background with a rusted radiation sign and acrylic glass tab panels.
+The helper uses **WinUI 3 / Windows App SDK with Fluent controls**, not WPF or WinForms, over
+Ian's supplied forest artwork, weathered speaker/trefoil emblem, and translucent acrylic tab panels.
 Its standard title bar is replaced by a draggable in-app header with minimize, maximize/restore,
-and close controls; minimize/close still hide to the tray. Subtitle-inspired yellow headings,
-white supporting text, Bahnschrift typography, and small text shadows echo the game.
+and close controls; minimize/close still hide to the tray. Barlow Condensed display lettering,
+IBM Plex Sans controls and body text, and IBM Plex Mono technical text are bundled with their font licenses.
+The native uppercase app name is weathered white `ZONE` and yellow `XM`; amber section titles
+use the same live glyph-masked wear texture, not pre-rendered lettering images.
 This is a desktop approximation, not the game's exact font/material/texture rendering.
 The activity log remains monospaced, and Windows high-contrast colors override the custom palette.
 
@@ -427,14 +449,14 @@ that disappear between polls.
   termination can leave an expired file on disk until the companion runs again.
   Original Windows notifications are never modified or dismissed by the companion.
 
-Build/install (Windows x64, .NET 10 SDK, Windows SDK with MakeAppx):
+Developer build/install (Windows x64, .NET 10 SDK, Windows SDK with MakeAppx):
 
 ```powershell
 .\mods\zonexm\scripts\build-zonexm-notifications.ps1
 # Register the unpacked development package for this Windows user:
 .\mods\zonexm\scripts\build-zonexm-notifications.ps1 -Register
 # Windows may require Developer Mode; the script does not enable it or install certificates.
-# Launch "ZoneXM Notifications" from Start and grant notification access.
+# Launch "ZoneXM Companion" from Start; notification access is optional.
 .\shared\scripts\deploy-ue4ss.ps1 -Mods ZoneXM -SkipSignatures
 # Restart the game to load the updated Lua reader.
 dotnet run --project .\mods\zonexm\src\ZoneXM.Notifications.Tests -c Release
@@ -447,6 +469,47 @@ before rebuilding it. Distribution to other machines would require an appropriat
 package-signing/install workflow; no certificate trust changes are made here.
 Uninstall with `Get-AppxPackage -Name ZoneXM.Notifications | Remove-AppxPackage`
 after exiting the companion; consent and ducking settings in the shared ZoneXM folder are retained.
+
+### Microsoft Store readiness
+
+The local package is a development build, not a certified Store release. Remaining work:
+
+- Reserve **ZoneXM Companion** in Partner Center and obtain the exact package Identity Name,
+  Publisher and Publisher Display Name from **Product identity**. The checked-in
+  `ZoneXM.Notifications` / `CN=ZoneXM` values are development placeholders.
+- Produce the self-contained x64 MSIX with those identity values. Use the existing
+  `-IdentityName`, `-Publisher`, `-PublisherDisplayName` and `-Version` build parameters;
+  the fourth version component must be zero. Use a separate `-OutputDirectory` and do not
+  register the Store-identity draft over the local development install. Microsoft signs
+  approved Store packages; local sideloading has a separate signing/trust workflow.
+- Supply certification notes explaining `runFullTrust` (desktop WinUI, CoreAudio and tray),
+  `unvirtualizedResources` (the shared `%LOCALAPPDATA%\ZoneXM` folder), and
+  `userNotificationListener` (explicit permission plus per-app opt-in). Restricted-capability
+  acceptance must be checked in Partner Center; local MakeAppx validation is not Store approval.
+- Review Notification Center forwarding against Store policy 10.9 before submission:
+  retained entries can currently appear in-game under Do Not Disturb or disabled Windows
+  banners. Explain the behavior and resolve any required policy change before shipping.
+- Publish the [privacy policy](mods/zonexm/PRIVACY.md) and support contact at public HTTPS
+  URLs. Prepare screenshots, an accurate description, age-rating answers and certification
+  test steps. Disclose the game, UE4SS and ZoneXM mod dependency at the start of the listing;
+  confirm redistribution rights for supplied artwork and keep bundled font license notices.
+- Run Windows App Certification Kit and a fresh-account/machine install, upgrade and uninstall
+  check. Verify notification denial/revocation, shared-file access, audio restoration, tray
+  behavior, high contrast and mixed DPI; test the Steam and Game Pass mod packages in-game.
+- Either ship only the native audio/notification features or integrate GSMTC now-playing in
+  C# first. For GSMTC, review `globalMediaControl` capability requirements for the packaged
+  desktop app and update privacy documentation/tests. Do not advertise that prototype as a
+  script-free companion feature before it is implemented.
+
+A full-trust desktop companion can launch bundled PowerShell as an ordinary child process,
+but packaging does not override execution policy, application-control policy or elevation rules.
+There is no need for that in the current companion, and a native GSMTC bridge is the preferred
+way to avoid a second runtime/child process. Do not require players to disable security settings,
+run setup scripts, or install PowerShell 7. Build-time artwork scripts are developer tools only.
+
+References: [Microsoft Store publishing](https://learn.microsoft.com/en-us/windows/apps/publish/),
+[Store policies](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies), and
+[capability declarations](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/app-capability-declarations).
 
 Verified locally: package registration, user-granted notification permission, advancing
 heartbeat at the game-readable path, and a synthetic Windows toast reaching the exact
@@ -465,7 +528,7 @@ Nonzero viewport anchors read back as zero in this game, putting the earlier lay
 The normal banner now uses the verified measured-position approach and updates during
 viewport changes; narrow viewports reduce the box/insets to stay on-screen.
 Restart to load this fix; normal song-change delivery with the new position still needs checking.
-The user subsequently confirmed viewport-measured normal notifications work well.
+Ian subsequently confirmed viewport-measured normal notifications work well.
 Subtitle-matched two-color styling is a later update and needs an in-game visual check.
 Pandora song-change rendering and subtitle styling were confirmed visually; its
 artist-first correction and prefix removal require a game restart.

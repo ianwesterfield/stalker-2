@@ -61,13 +61,16 @@ internal sealed class BridgeWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZoneXM");
     private readonly NotificationBridge bridge;
     private readonly ActivityLog activity = new();
-    private readonly TextBlock logView = new() {
-        IsTextSelectionEnabled = true, TextWrapping = TextWrapping.NoWrap,
-        FontFamily = new FontFamily("Consolas"), FontSize = 12
+    private readonly TextBlock logView = new()
+    {
+        IsTextSelectionEnabled = true,
+        TextWrapping = TextWrapping.Wrap,
+        FontSize = 12
     };
-    private readonly ScrollViewer logScroll = new() {
+    private readonly ScrollViewer logScroll = new()
+    {
         VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-        HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
     };
     private long logVersion = -1;
     private readonly AudioDucker audio;
@@ -78,7 +81,7 @@ internal sealed class BridgeWindow : Window
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 10, 0, 10) };
     private readonly StackPanel apps = new();
     private readonly Button access = new() { Content = "Allow notification access / Start", Padding = new Thickness(12, 6, 12, 6) };
-    private readonly Button pause = new() { Content = "Pause forwarding", IsEnabled = false, Margin = new Thickness(8, 0, 0, 0) };
+    private readonly Button pause = new() { Content = "Pause forwarding", IsEnabled = false };
     private readonly HashSet<string> allowed = new(StringComparer.Ordinal);
     private readonly HashSet<string> listed = new(StringComparer.Ordinal);
     private HashSet<(string App, uint Id, long Created)> observed = [];
@@ -102,6 +105,7 @@ internal sealed class BridgeWindow : Window
     internal BridgeWindow()
     {
         Title = "ZoneXM Companion";
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "App.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(780, 740));
         if (AppWindow.Presenter is OverlappedPresenter presenter)
             presenter.SetBorderAndTitleBar(true, false);
@@ -109,13 +113,23 @@ internal sealed class BridgeWindow : Window
         bridge = new NotificationBridge(Path.Combine(directory, "notification.txt"), activity.Add);
         bridge.Clear();
         audio = new AudioDucker(Path.Combine(directory, "alert.flag"), activity.Add);
+        logView.Style = (Style)Application.Current.Resources["CompanionTechnicalStyle"];
+        status.Style = (Style)Application.Current.Resources["CompanionTechnicalStyle"];
+        audioStatus.Style = (Style)Application.Current.Resources["CompanionTelemetryStyle"];
         var root = new StackPanel { Margin = new Thickness(24), Spacing = 8 };
-        var tabs = new TabView {
-            IsAddTabButtonVisible = false, CanDragTabs = false, CanReorderTabs = false, Margin = new Thickness(12, 0, 12, 12)
+        var tabs = new TabView
+        {
+            IsAddTabButtonVisible = false,
+            CanDragTabs = false,
+            CanReorderTabs = false,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            Margin = new Thickness(12, 0, 12, 12)
         };
-        var settingsTab = new TabViewItem {
+        var settingsTab = new TabViewItem
+        {
             IsClosable = false,
-            Header = SubtitleText("Settings", true, 14), Content = Glass(new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto })
+            Header = TabHeading("Settings"),
+            Content = Glass(new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto })
         };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(settingsTab, "Settings");
         tabs.TabItems.Add(settingsTab);
@@ -124,7 +138,8 @@ internal sealed class BridgeWindow : Window
         logPanel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var logHeader = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
         logHeader.Children.Add(SubtitleText("Activity log", true));
-        logHeader.Children.Add(new TextBlock {
+        logHeader.Children.Add(new TextBlock
+        {
             Text = "Activity (last 200 events, local time, memory only). No notification titles or bodies.\nForwarded means written to the banner file, not proof of in-game display.",
             TextWrapping = TextWrapping.Wrap
         });
@@ -135,12 +150,13 @@ internal sealed class BridgeWindow : Window
         logScroll.Content = logView;
         Grid.SetRow(logScroll, 1);
         logPanel.Children.Add(logScroll);
-        var activityTab = new TabViewItem { Header = SubtitleText("Activity log", true, 14), Content = Glass(logPanel), IsClosable = false };
+        var activityTab = new TabViewItem { Header = TabHeading("Activity log"), Content = Glass(logPanel), IsClosable = false };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(activityTab, "Activity log");
         tabs.TabItems.Add(activityTab);
         Content = CreateShell(tabs);
         root.Children.Add(SubtitleText("Windows Notification Center", true));
-        root.Children.Add(new TextBlock {
+        root.Children.Add(new TextBlock
+        {
             Text = "Forwarding is opt-in for each app. Newly discovered apps stay unchecked. Selected apps can forward entries hidden " +
                 "by Do Not Disturb or disabled Windows banners. Existing history is skipped. " +
                 "Windows grants broad read access; only checked apps below may forward locally.\n\n" +
@@ -150,8 +166,10 @@ internal sealed class BridgeWindow : Window
                 "Audio ducking is built in and does not need PowerShell or notification permission.",
             TextWrapping = TextWrapping.Wrap
         });
-        var duckAudio = new CheckBox {
-            Content = "Duck other apps during dialogue/combat", IsChecked = true,
+        var duckAudio = new CheckBox
+        {
+            Content = "Duck other apps during dialogue/combat",
+            IsChecked = true,
             Margin = new Thickness(0, 12, 0, 0)
         };
         RoutedEventHandler updateDucking = (_, _) =>
@@ -165,13 +183,22 @@ internal sealed class BridgeWindow : Window
         root.Children.Add(duckLevel);
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(duckSlider, "Volume retained while ducked (%)");
         root.Children.Add(duckSlider);
-        root.Children.Add(new TextBlock {
+        root.Children.Add(new TextBlock
+        {
             Text = "0% = mute; 100% = unchanged. Percentage of each app's original volume.",
             TextWrapping = TextWrapping.Wrap
         });
         root.Children.Add(audioStatus);
         audioTimer.Tick += (_, _) => { audioStatus.Text = audio.Status; RefreshLog(); };
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 14, 0, 0) };
+        var buttons = new Grid { ColumnSpacing = 8, Margin = new Thickness(0, 14, 0, 0) };
+        buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        buttons.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        foreach (var button in new[] { access, pause })
+        {
+            button.Content = new TextBlock { Text = (string)button.Content, Style = (Style)Application.Current.Resources["CompanionButtonLabelStyle"] };
+            button.HorizontalAlignment = HorizontalAlignment.Stretch;
+        }
+        Grid.SetColumn(pause, 1);
         buttons.Children.Add(access);
         buttons.Children.Add(pause);
         root.Children.Add(buttons);
@@ -241,22 +268,16 @@ internal sealed class BridgeWindow : Window
         }
     }
 
-    private static Grid SubtitleText(string value, bool title, double size = 20)
+    private static TextBlock TabHeading(string value) => new()
     {
-        var text = new TextBlock { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap };
-        if (title) text.Style = (Style)Application.Current.Resources["SubtitleTitleStyle"];
-        // A small text-shaped offset approximates the game's shadow without shipping Unreal assets.
-        var shadow = new TextBlock {
-            Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap,
-            Style = (Style)Application.Current.Resources["SubtitleShadowStyle"],
-            RenderTransform = new TranslateTransform { X = 1, Y = 2 }, IsHitTestVisible = false
-        };
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(shadow,
-            Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-        var result = new Grid();
-        result.Children.Add(shadow);
-        result.Children.Add(text);
-        return result;
+        Text = value.ToUpperInvariant(),
+        Style = (Style)Application.Current.Resources["CompanionTabStyle"]
+    };
+
+    private FrameworkElement SubtitleText(string value, bool title, double size = 21)
+    {
+        if (title) return new TitleLogo(value.ToUpperInvariant(), size) { Log = activity.Add };
+        return new TextBlock { Text = value, FontSize = size, TextWrapping = TextWrapping.Wrap };
     }
 
     private static Border Glass(UIElement child) =>
@@ -264,35 +285,57 @@ internal sealed class BridgeWindow : Window
 
     private Grid CreateShell(TabView tabs)
     {
-        var shell = new Grid {
+        var shell = new Grid
+        {
             RequestedTheme = ElementTheme.Dark,
             Style = (Style)Application.Current.Resources["CompanionShellStyle"]
         };
+        foreach (var theme in Application.Current.Resources.ThemeDictionaries)
+        {
+            var resources = new ResourceDictionary();
+            foreach (var resource in (ResourceDictionary)theme.Value)
+                resources[resource.Key] = resource.Value;
+            shell.Resources.ThemeDictionaries[theme.Key] = resources;
+        }
         shell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         shell.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        if (!new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast)
-        {
-            var sign = new Image {
-                Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new System.Uri("ms-appx:///Assets/RadiationSign.png")),
-                Width = 300, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, 24, 44, 0), IsHitTestVisible = false
-            };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(sign, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
-            Grid.SetRowSpan(sign, 2);
-            shell.Children.Add(sign);
-        }
-        var header = new Grid { MinHeight = 76 };
+        var backdrop = new Border { Style = (Style)Application.Current.Resources["CompanionBackdropStyle"] };
+        Grid.SetRowSpan(backdrop, 2);
+        shell.Children.Add(backdrop);
+        var header = new Grid { MinHeight = 94, Style = (Style)Application.Current.Resources["CompanionHeaderStyle"] };
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var grain = new Border { Style = (Style)Application.Current.Resources["CompanionGrainStyle"] };
+        Grid.SetColumnSpan(grain, 2);
+        header.Children.Add(grain);
+        var rail = new Border { Height = 3, VerticalAlignment = VerticalAlignment.Bottom, Style = (Style)Application.Current.Resources["CompanionRustStyle"] };
+        Grid.SetColumnSpan(rail, 2);
+        header.Children.Add(rail);
         dragArea = new Grid { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        var heading = new StackPanel { Margin = new Thickness(24, 12, 12, 12), Spacing = 2 };
-        heading.Children.Add(SubtitleText("ZoneXM", true, 24));
+        var branding = new Grid { Margin = new Thickness(24, 14, 12, 14), ColumnSpacing = 14 };
+        branding.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        branding.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        branding.Children.Add(new Image
+        {
+            Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri("ms-appx:///Assets/Brand.png")),
+            Width = 56,
+            Height = 56,
+            VerticalAlignment = VerticalAlignment.Center,
+            Style = (Style)Application.Current.Resources["CompanionBrandStyle"]
+        });
+        var heading = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        heading.Children.Add(new TitleLogo { Log = activity.Add });
         heading.Children.Add(SubtitleText("Audio ducking and notification companion", false, 14));
-        dragArea.Children.Add(heading);
+        Grid.SetColumn(heading, 1);
+        branding.Children.Add(heading);
+        dragArea.Children.Add(branding);
         header.Children.Add(dragArea);
-        var controls = new StackPanel {
-            Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 8, 8, 0), Spacing = 4
+        var controls = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 8, 8, 0),
+            Spacing = 4
         };
         var minimize = CaptionButton("Minimize to tray", "\uE921");
         minimize.Click += (_, _) =>
@@ -334,9 +377,12 @@ internal sealed class BridgeWindow : Window
 
     private static Button CaptionButton(string name, string glyph)
     {
-        var button = new Button {
+        var button = new Button
+        {
             Content = new FontIcon { Glyph = glyph, FontSize = 12 },
-            Width = 40, Height = 36, Padding = new Thickness(0),
+            Width = 40,
+            Height = 36,
+            Padding = new Thickness(0),
             Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderThickness = new Thickness(0)
         };
@@ -468,10 +514,16 @@ internal sealed class BridgeWindow : Window
     private void AddApp(string id, string name)
     {
         if (!listed.Add(id)) return;
-        var checkbox = new CheckBox {
-            Content = $"{name} ({id})", IsChecked = allowed.Contains(id),
+        var label = new StackPanel { Spacing = 2 };
+        label.Children.Add(new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap });
+        label.Children.Add(new TextBlock { Text = id, Style = (Style)Application.Current.Resources["CompanionTechnicalStyle"] });
+        var checkbox = new CheckBox
+        {
+            Content = label,
+            IsChecked = allowed.Contains(id),
             Margin = new Thickness(0, 7, 0, 0)
         };
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(checkbox, $"{name} ({id})");
         RoutedEventHandler updateApp = (_, _) =>
         {
             if (checkbox.IsChecked == true) allowed.Add(id); else allowed.Remove(id);
