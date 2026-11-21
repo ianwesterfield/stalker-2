@@ -58,6 +58,8 @@ public sealed partial class BridgeApplication : Application
 internal sealed class BridgeWindow : Window
 {
     private readonly string directory = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "ZoneXM");
+    private readonly string legacyDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ZoneXM");
     private readonly NotificationBridge bridge;
     private readonly ActivityLog activity = new();
@@ -218,13 +220,19 @@ internal sealed class BridgeWindow : Window
         Closed += (_, _) => Shutdown();
         try
         {
-            var settings = HelperSettings.Load(SettingsPath);
+            var legacySettingsPath = Path.Combine(legacyDirectory, "helper-settings.json");
+            var importingSettings = !File.Exists(SettingsPath) && File.Exists(legacySettingsPath);
+            var settings = HelperSettings.Load(SettingsPath, legacySettingsPath);
+
+            if (importingSettings)
+                activity.Add("Imported existing helper settings into the user-profile ZoneXM folder.");
+
             foreach (var id in settings.AllowedApps) allowed.Add(id);
             audio.DuckPercent = settings.DuckPercent;
             duckSlider.Value = settings.DuckPercent;
             foreach (var id in allowed) AddApp(id, id);
             status.Text = "Ready. Start to discover apps, then check only those you want to forward.";
-            if (File.Exists(Path.Combine(directory, "notification-apps.json")) && !File.Exists(SettingsPath))
+            if (File.Exists(Path.Combine(legacyDirectory, "notification-apps.json")) && !File.Exists(SettingsPath))
                 activity.Add("Legacy exclusions were not converted to consent. All apps start unchecked; opt in individually.");
         }
         catch (Exception error)

@@ -1,6 +1,6 @@
 """Create + tune the physics asset that ragdolls jnt_fuse (the rag) in hands.
 
-Discovery (editor_probe_phys.py): this drop exposes NO body/constraint arrays
+Discovery: this drop exposes NO body/constraint arrays
 on PhysicsAsset, no SkeletalBodySetup/PhysicsConstraintTemplate classes, and
 PhysicsAssetFactory is dialog-gated. But SkeletalMeshEditorSubsystem has
 create_physics_asset(mesh) — engine builds bodies+constraints per skinned
@@ -106,19 +106,16 @@ unreal.log(f"[phys] physics asset: {pa.get_path_name()}")
 bodies = find_bodies(pa)
 unreal.log(f"[phys] bodies by bone: {sorted(bodies)}")
 anchor_bs = bodies.get(ANCHOR)
-missing = [b for b in CHAIN if b not in bodies]
-assert not missing, f"PHYS_FAIL: no body for {missing} (check per-link helpers/weights)"
+missing = [b for b in [ANCHOR] + CHAIN if b not in bodies]
+assert not missing, f"PHYS_FAIL: no body for {missing} (check per-bone helpers/weights)"
 
-if anchor_bs:
+anchor_bs.set_editor_property("physics_type", unreal.PhysicsType.PHYS_TYPE_KINEMATIC)
+try:
     anchor_bs.set_editor_property(
-        "physics_type", unreal.PhysicsType.PHYS_TYPE_KINEMATIC
+        "collision_reponse", unreal.BodyCollisionResponse.BODY_COLLISION_DISABLED
     )
-    try:
-        anchor_bs.set_editor_property(
-            "collision_reponse", unreal.BodyCollisionResponse.BODY_COLLISION_DISABLED
-        )
-    except Exception as e:
-        unreal.log_warning(f"[phys] anchor collision off: {e}")
+except Exception as e:
+    unreal.log_warning(f"[phys] anchor collision off: {e}")
 
 # chain bodies: simulated, no collision, light with a hem taper so the strip
 # hangs instead of wagging; damping climbs toward the hem to kill jitter
@@ -150,8 +147,6 @@ for i, bone in enumerate(CHAIN):
 # small sphyl along each link's MEASURED down-bone axis instead, sized to the
 # link so each body's COM sits mid-link. ---
 for bone, bs in [(ANCHOR, anchor_bs)] + [(b, bodies[b]) for b in CHAIN]:
-    if not bs:
-        continue
     ag = bs.get_editor_property("agg_geom")
     for elems in ("sphyl_elems", "sphere_elems", "box_elems"):
         try:

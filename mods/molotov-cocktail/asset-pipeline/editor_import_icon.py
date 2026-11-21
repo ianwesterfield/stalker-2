@@ -8,7 +8,7 @@ import unreal
 
 PLUGIN = "/MolotovBottle"
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out")
-NAMES = ("T_MolotovIcon", "T_MolotovKitIcon")
+NAMES = ("T_MolotovIcon",)
 
 
 def import_icon(name):

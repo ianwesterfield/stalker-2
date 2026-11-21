@@ -1,7 +1,6 @@
 # Reimport SK_MolotovBottle through Interchange with an EXPLICIT pipeline:
-# the project default recomputes normals (kills the flame's hijacked
-# flame-axis normals) and ignores vertex colors (droop weights -> white ->
-# the rag explodes). Run in the editor Output Log:  py "<this file>"
+# the project default ignores vertex colors (droop weights -> white -> the
+# rag explodes). Run in the editor Output Log:  py "<this file>"
 import os
 
 import unreal
@@ -17,13 +16,8 @@ assert sk, "SK_MolotovBottle missing"
 skeleton = sk.get_editor_property("skeleton")
 unreal.log(f"existing skeleton: {skeleton.get_path_name() if skeleton else None}")
 
-# NOTE: the pinned vanilla SKEL_RGD5 accepts jnt_fuse/jnt_fuse_end merges
-# in-memory on every import (proven via AnimPose bone dump) — no plugin
-# skeleton duplicate needed; clean up the one this session experiment made
-MY_SKEL = f"{PLUGIN}/SKEL_MolotovBottle"
-if unreal.EditorAssetLibrary.does_asset_exist(MY_SKEL):
-    unreal.EditorAssetLibrary.delete_asset(MY_SKEL)
-    unreal.log("stray SKEL_MolotovBottle deleted")
+# the pinned vanilla SKEL_RGD5 accepts the jnt_fuse/jnt_fuse_end merges
+# in-memory on every import, so no plugin skeleton is needed
 
 pipeline = unreal.InterchangeGenericAssetsPipeline()
 cmp = pipeline.get_editor_property("common_meshes_properties")
@@ -41,8 +35,8 @@ skel.set_editor_property("skeleton", skeleton)
 meshp = pipeline.get_editor_property("mesh_pipeline")
 # jnt_fuse ragdoll needs bodies; editor_fix_phys.py retunes them every import
 meshp.set_editor_property("create_physics_asset", True)
-# FBX carries placeholder materials (incl. one literally named M_RagFlame) —
-# never let the import create/stomp assets; slots keep their names regardless
+# FBX carries placeholder materials — never let the import create/stomp
+# assets; slots keep their names regardless
 matp = pipeline.get_editor_property("material_pipeline")
 matp.set_editor_property("import_materials", False)
 matp.get_editor_property("texture_pipeline").set_editor_property(

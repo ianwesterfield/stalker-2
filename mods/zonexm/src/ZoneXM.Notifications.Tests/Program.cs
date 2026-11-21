@@ -101,6 +101,7 @@ finally
 }
 
 var settingsPath = Path.Combine(Path.GetTempPath(), $"zonexm-settings-{Guid.NewGuid():N}.json");
+var legacySettingsPath = settingsPath + ".legacy";
 try
 {
     var defaults = HelperSettings.Load(settingsPath);
@@ -121,8 +122,41 @@ try
     }
     Check(!File.Exists(settingsPath + ".tmp"), "Settings temporary file left behind");
     Console.WriteLine("PASS: opt-in defaults, persisted percentage/allowlist, invalid and legacy settings fail closed");
+
+    File.Delete(settingsPath);
+    var migratedSettings = new HelperSettings { DuckPercent = 67, AllowedApps = ["Existing.OptedIn!App"] };
+    migratedSettings.Save(legacySettingsPath);
+    var legacyContent = File.ReadAllText(legacySettingsPath);
+    var imported = HelperSettings.Load(settingsPath, legacySettingsPath);
+    Check(imported.DuckPercent == 67 && imported.AllowedApps.SequenceEqual(["Existing.OptedIn!App"]),
+        "Migration lost the existing duck level or explicit consent");
+    Check(File.ReadAllText(settingsPath) == legacyContent, "Migration did not persist validated settings");
+    Check(File.ReadAllText(legacySettingsPath) == legacyContent, "Migration modified the legacy settings");
+
+    new HelperSettings { DuckPercent = 25 }.Save(settingsPath);
+    var existingSettings = HelperSettings.Load(settingsPath, legacySettingsPath);
+    Check(existingSettings.DuckPercent == 25 && existingSettings.AllowedApps.Length == 0,
+        "Legacy settings replaced newer settings or restored revoked consent");
+
+    File.Delete(settingsPath);
+    File.WriteAllText(legacySettingsPath, "{\"AllowedApps\":null}");
+    var invalidLegacyRejected = false;
+    try { HelperSettings.Load(settingsPath, legacySettingsPath); }
+    catch (InvalidDataException) { invalidLegacyRejected = true; }
+    Check(invalidLegacyRejected && !File.Exists(settingsPath), "Invalid legacy settings were imported or silently defaulted");
+
+    File.Delete(legacySettingsPath);
+    var freshSettings = HelperSettings.Load(settingsPath, legacySettingsPath);
+    Check(freshSettings.AllowedApps.Length == 0 && freshSettings.DuckPercent == 15,
+        "A missing legacy file changed safe first-run defaults");
+    Console.WriteLine("PASS: validated settings migrate once, persist consent exactly, preserve source, and never override new settings");
 }
-finally { File.Delete(settingsPath); }
+finally
+{
+    File.Delete(settingsPath);
+    File.Delete(legacySettingsPath);
+    if (File.Exists(settingsPath + ".tmp")) File.Delete(settingsPath + ".tmp");
+}
 
 var activity = new ActivityLog();
 for (var i = 0; i < 250; i++) activity.Add($"event-{i}");

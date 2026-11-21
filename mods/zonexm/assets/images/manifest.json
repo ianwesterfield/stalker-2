@@ -1,0 +1,91 @@
+{
+  "brand": "ZONEXM",
+  "zone_color": "weathered off-white",
+  "xm_color": "weathered amber",
+  "current_assets": [
+    {
+      "path": "01_Ready_To_Upload/Brand_Masters/ZONEXM_MSStore_BoxArt_Master_1254x1254.png",
+      "width": 1254,
+      "height": 1254,
+      "bytes": 2690543
+    },
+    {
+      "path": "01_Ready_To_Upload/Brand_Masters/ZONEXM_MSStore_PosterArt_Master_1024x1536.png",
+      "width": 1024,
+      "height": 1536,
+      "bytes": 2515286
+    },
+    {
+      "path": "01_Ready_To_Upload/Brand_Masters/ZoneXM_Brand_Master_WhiteZONE_YellowXM.png",
+      "width": 1672,
+      "height": 941,
+      "bytes": 2681501
+    },
+    {
+      "path": "01_Ready_To_Upload/Branded_Hero_Banners/ZONEXM_Branded_Hero_1280x720.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1819438
+    },
+    {
+      "path": "01_Ready_To_Upload/Branded_Hero_Banners/ZONEXM_Branded_Hero_1920x1080.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 3763789
+    },
+    {
+      "path": "01_Ready_To_Upload/Branded_Hero_Banners/ZONEXM_Branded_Hero_2560x1440.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 5927388
+    },
+    {
+      "path": "01_Ready_To_Upload/Branded_Hero_Banners/ZONEXM_Branded_Hero_3840x2160.png",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 10615778
+    },
+    {
+      "path": "01_Ready_To_Upload/Microsoft_Store_Exact_Sizes/ZONEXM_MSStore_AppTile_150x150.png",
+      "width": 150,
+      "height": 150,
+      "bytes": 48062
+    },
+    {
+      "path": "01_Ready_To_Upload/Microsoft_Store_Exact_Sizes/ZONEXM_MSStore_AppTile_300x300.png",
+      "width": 300,
+      "height": 300,
+      "bytes": 180290
+    },
+    {
+      "path": "01_Ready_To_Upload/Microsoft_Store_Exact_Sizes/ZONEXM_MSStore_AppTile_71x71.png",
+      "width": 71,
+      "height": 71,
+      "bytes": 11794
+    },
+    {
+      "path": "01_Ready_To_Upload/Microsoft_Store_Exact_Sizes/ZONEXM_MSStore_BoxArt_1080x1080.png",
+      "width": 1080,
+      "height": 1080,
+      "bytes": 2288868
+    },
+    {
+      "path": "01_Ready_To_Upload/Microsoft_Store_Exact_Sizes/ZONEXM_MSStore_BoxArt_2160x2160.png",
+      "width": 2160,
+      "height": 2160,
+      "bytes": 7233088
+    },
+    {
+      "path": "01_Ready_To_Upload/Microsoft_Store_Exact_Sizes/ZONEXM_MSStore_PosterArt_1440x2160.png",
+      "width": 1440,
+      "height": 2160,
+      "bytes": 4983800
+    },
+    {
+      "path": "01_Ready_To_Upload/Microsoft_Store_Exact_Sizes/ZONEXM_MSStore_PosterArt_720x1080.png",
+      "width": 720,
+      "height": 1080,
+      "bytes": 1439872
+    }
+  ]
+}

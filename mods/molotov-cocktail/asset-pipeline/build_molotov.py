@@ -161,8 +161,8 @@ print(
 rag_mat = bpy.data.materials.new("MI_molotov_rag")
 
 
-# bare identical materials dedupe in UE Interchange -> rag+flame sections merge
-# into one slot; distinct principled colors keep them separate
+# bare identical materials dedupe in UE Interchange -> sections merge into one
+# slot; a distinct principled color keeps the rag separate
 def make_distinct(mat, rgba):
     mat.diffuse_color = rgba
     mat.use_nodes = True
@@ -193,7 +193,6 @@ rag_parts.append(plug)
 # the authored centerline IS the physical answer, so shape it directly.)
 rag_w = 0.056  # cloth width
 hang_len = 0.150  # free cloth below the lip
-tail_top = top_z + 0.004  # droop-weight anchor, shared with the flame colors
 theta0 = 0.0  # side of the bottle the rag hangs toward
 radial_v = Vector((math.cos(theta0), math.sin(theta0), 0))
 tangent_v = Vector((-math.sin(theta0), math.cos(theta0), 0))
@@ -214,14 +213,12 @@ for i in range(1, lip_steps + 1):  # clear the glass rim with headroom
         0.002 + (lip_r - 0.002) * f
     )
     rows.append((c, 0.008 + 0.004 * f, False))
-diag_z = 0.025  # kept: shells cut above this; fire starts past the lip arc
 
 
 # below the lip the cloth is a STRAIGHT strip: one constant-angle line from the
 # lip exit, tilted just enough that it clears the widest glass (shoulder) on the
-# way down. The old glass-following walker baked the shoulder bend into the
-# geometry — with the bone-chain ragdoll the drape is physics' job now, and a
-# baked bend read as a kink halfway down the swinging rag.
+# way down. The bone-chain ragdoll does the drape; a baked bend reads as a kink
+# halfway down the swinging rag.
 def glass_r(z):
     if z <= lo.z:
         return prof[0]
@@ -260,7 +257,7 @@ for i in range(1, n_hang + 1):
 
 cols = 15
 # drape character: texture-scale folds only — macro bends (cup, sway) belong to
-# the physics chain now, baking them in fought the sim
+# the physics chain
 RIPPLE = 0.0032  # wavy folds, distributed up the sheet
 CORNER = 0.003  # hem corners sag below the center
 mesh = bpy.data.meshes.new("rag_tail")
@@ -300,8 +297,8 @@ bpy.context.collection.objects.link(tail)
 hem_z = min(v.co.z for v in tail.data.vertices)
 print(f"TRACE drape: hem_z={hem_z:.4f} target~{top_z - hang_len:.4f}")
 
-# fire shells offset along +normal: make the drape's normals face away from
-# the glass first (grid winding leaves them pointing inward)
+# grid winding leaves the drape's normals pointing at the glass; flip them out
+# so solidify thickens away from the bottle and the shell-sign color is stable
 mean_out = sum(
     v.normal.dot(Vector((v.co.x - cx, v.co.y - cy, 0.0))) for v in tail.data.vertices
 )
@@ -312,7 +309,7 @@ if mean_out < 0:
     bm.to_mesh(tail.data)
     bm.free()
     tail.data.update()
-sim_me = tail.data.copy()  # pre-solidify drape = the fire shells' substrate
+
 solid = tail.modifiers.new("solid", "SOLIDIFY")
 solid.thickness = 0.005
 solid.offset = 1  # thicken away from the glass: the sim surface rests on it
@@ -337,9 +334,9 @@ for p in tail.data.polygons:
     p.use_smooth = True
 rag_parts.append(tail)
 
-# vertex colors drive the droop WPO: the drape is fully MODELED now, so droop
+# vertex colors drive the droop WPO: the drape is fully modeled, so droop
 # must be ZERO on the curved top (over-lip arc/shoulder — rest-flare there
-# tore the cloth into shards, the bat-wing lesson amplified) and only ramp in
+# tears the cloth into shards) and only ramp in
 # on the straight plumb sheet where the droop axis is coherent. G = shell
 # sign: radial side test, stable on the plumb sheet (the per-vert outward
 # test jittered 0/1 where normals point up, flinging neighbors apart)
@@ -356,144 +353,32 @@ for part in rag_parts:
     part.data.materials.clear()
     part.data.materials.append(rag_mat)
 
-# --- flame cards: three crossed, row-subdivided quads above the rag plug.
-# Skinned geometry = follows every animation by construction; the material
-# (unlit additive, noise-distorted gradient) supplies motion. Rows give the
-# shader vertices to sway with World Position Offset.
-flame_mat = bpy.data.materials.new("M_RagFlame")
-make_distinct(flame_mat, (1.0, 0.45, 0.05, 1.0))
-sheath_mat = bpy.data.materials.new("M_SheathFlame")
-make_distinct(sheath_mat, (0.1, 0.5, 1.0, 1.0))
-flame_parts = []
-
-
-def make_flame_cards(
-    prefix, center, base_z, f_h, f_w, f_rows=6, center_fn=None, ang_off=0.0
-):
-    for k, ang in enumerate((0.0, 60.0, 120.0)):
-        theta = math.radians(ang + ang_off)
-        tang = Vector((math.cos(theta), math.sin(theta), 0))
-        fm = bpy.data.meshes.new(f"{prefix}_{k}")
-        vs, fs = [], []
-        for r in range(f_rows + 1):
-            t = r / f_rows
-            z = base_z + f_h * t
-            c = center_fn(z) if center_fn else center
-            for s in (-1.0, 1.0):
-                p = Vector((c[0], c[1], z)) + tang * (f_w / 2 * s)
-                vs.append(tuple(p))
-        for r in range(f_rows):
-            a = r * 2
-            fs.append((a, a + 1, a + 3, a + 2))
-        fm.from_pydata(vs, [], fs)
-        uvl = fm.uv_layers.new(name="UVMap")
-        for poly in fm.polygons:
-            for li in poly.loop_indices:
-                vi = fm.loops[li].vertex_index
-                row, side = vi // 2, vi % 2
-                uvl.data[li].uv = (float(side), row / f_rows)  # v=0 base, v=1 tip
-        fm.update()
-        # hijack normals as the flame axis: material is unlit, and skinning rotates
-        # normals, so WPO can read VertexNormalWS to re-point the flame at world-up
-        fm.normals_split_custom_set([(0.0, 0.0, 1.0)] * len(fm.loops))
-        card = bpy.data.objects.new(f"{prefix}_{k}", fm)
-        bpy.context.collection.objects.link(card)
-        card.data.materials.append(flame_mat)
-        flame_parts.append(card)
-
-
-# single flame cap: one wide cluster wrapping the plug — no satellite clusters,
-# which read as extra wicks; roots sunk below the bulge so the base is hidden
-f_base = top_z - 0.008
-make_flame_cards("flame_card", (cx, cy), f_base, 0.14, 0.11, f_rows=7)
-
-
-# --- fire shells: the simmed drape duplicated and puffed out along its own
-# normals — the bonfire flipbook burns exactly on the cloth's real shape; two
-# layers give parallax depth. Replaces the hand-placed panels and the 16 card
-# clusters that chased the old procedural drape.
-def make_fire_shell(name, off):
-    me = sim_me.copy()
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    bm.verts.ensure_lookup_table()
-    cut_row = pin_steps + 1 + lip_steps  # fire starts past the lip, not inside
-    cut = cut_row * cols
-    bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.index < cut], context="VERTS")
-    bm.to_mesh(me)
-    bm.free()
-    me.update()
-    for v in me.vertices:
-        v.co += v.normal * off
-    # flipbook UVs: U across the cloth; Blender V=0 at the hem (FBX import
-    # flips V -> UE 1-at-bottom = flame frame base at the hem, fire flows up)
-    u_start = arc[cut_row] / arc[-1]
-    for d in me.uv_layers[0].data:
-        u, v2 = d.uv
-        d.uv = (v2, 1.0 - (u - u_start) / (1.0 - u_start))
-    me.normals_split_custom_set([(0.0, 0.0, 1.0)] * len(me.loops))  # flame axis
-    ob = bpy.data.objects.new(name, me)
-    bpy.context.collection.objects.link(ob)
-    ob.data.materials.clear()
-    ob.data.materials.append(sheath_mat)
-    flame_parts.append(ob)
-
-
-make_fire_shell("sheath_in", 0.008)
-make_fire_shell("sheath_out", 0.015)
-
 # bake rag transforms
 bpy.context.view_layer.update()
-for part in rag_parts + flame_parts:
+for part in rag_parts:
     part.data.transform(part.matrix_world)
     part.matrix_world.identity()
 
-# flame/droop data colors — R = droop weight (tip flame verts match the tail's
-# per-vertex hang so the climbing fire stays glued to the swinging cloth),
-# G = legacy shell sign, B = height above card base (/20 cm) for the bend scale
-for part in [bottle, plug] + flame_parts:
+# glass and plug carry no droop: R = 0 keeps them rigid under the rag WPO
+for part in [bottle, plug]:
     while part.data.color_attributes:
         part.data.color_attributes.remove(part.data.color_attributes[0])
     ca = part.data.color_attributes.new(name="Col", type="FLOAT_COLOR", domain="POINT")
-    if part.name.startswith("sheath_"):
-        base_z = min(v.co.z for v in part.data.vertices)
-        part_h = max(1e-6, max(v.co.z for v in part.data.vertices) - base_z)
-        for i, vtx in enumerate(part.data.vertices):
-            r_val = min(1.0, max(0.0, (tail_top - vtx.co.z) / 0.14))
-            t_h = (vtx.co.z - base_z) / part_h
-            a_val = min(1.0, max(0.0, (t_h - 0.18) / 0.5))  # blue roots -> red body
-            ca.data[i].color = (r_val, 1.0, (vtx.co.z - base_z) / 0.20, a_val)
-    elif part.name.startswith(("flame_", "tipflame_")):
-        is_tip = part.name.startswith("tipflame_")
-        base_z = min(v.co.z for v in part.data.vertices)
-        part_h = max(1e-6, max(v.co.z for v in part.data.vertices) - base_z)
-        for i, vtx in enumerate(part.data.vertices):
-            r_val = min(1.0, max(0.0, (tail_top - vtx.co.z) / 0.14)) if is_tip else 0.0
-            t_h = (vtx.co.z - base_z) / part_h
-            # A: blue alcohol burn where the flame roots into the cloth,
-            # orange only where it has risen clear of it. Cap: the plug bulge
-            # hides everything below t_h~0.15, so the blue must sit ABOVE it
-            # to be visible at all — blue to 30%, full orange from 75%
-            if is_tip:
-                a_val = 0.75 * min(1.0, max(0.0, (t_h - 0.30) / 0.45))
-            else:
-                a_val = min(1.0, max(0.0, (t_h - 0.30) / 0.45))
-            ca.data[i].color = (r_val, 1.0, (vtx.co.z - base_z) / 0.20, a_val)
-    else:
-        for d in ca.data:
-            d.color = (0.0, 1.0, 0.0, 1.0)
+    for d in ca.data:
+        d.color = (0.0, 1.0, 0.0, 1.0)
 
-# --- phys helpers: two sub-pixel triangles per CHAIN BONE ---
+# --- phys helpers: two sub-pixel triangles per PHYSICS BONE ---
 # UE's physics generator culls bones whose dominant-vert cloud half-diagonal
 # is under MinBoneSize (20cm, not settable via python) and merges their verts
-# into the parent; each chain link's cloud is ~4cm. One helper pair per link
-# stretches every link's cloud past the filter, all at the same two points —
-# symmetric about the mesh bounds center so the FP mid-body grip solve
-# (GetLocalBounds center) is unmoved. Stripped from the SM twin.
+# into the parent; each chain link's cloud is ~4cm and the glass alone (the
+# jnt_offset anchor) is ~14cm. One helper pair per bone stretches every cloud
+# past the filter, all at the same two points — symmetric about the mesh bounds
+# center so the bounds stay fixed. Stripped from the SM twin.
 CHAIN = ["jnt_fuse", "jnt_fuse_01", "jnt_fuse_02", "jnt_fuse_03", "jnt_fuse_04"]
 HANG_LINKS = len(CHAIN) - 1  # jnt_fuse itself anchors the pin+lip, barely swings
 helper_parts = []
-for ci, cname in enumerate(CHAIN):
+# None = the kinematic anchor: no chain group, so the free-vert pass skins it to jnt_offset
+for ci, cname in enumerate([None] + CHAIN):
     for hi, hz in enumerate((0.429, -0.091)):  # bounds center 0.169 +/- 0.26
         hme = bpy.data.meshes.new(f"phys_helper_{ci}_{hi}")
         e = 0.00005
@@ -504,17 +389,19 @@ for ci, cname in enumerate(CHAIN):
         hob = bpy.data.objects.new(f"phys_helper_{ci}_{hi}", hme)
         bpy.context.collection.objects.link(hob)
         for gname in (cname, "phys_helper"):
+            if gname is None:
+                continue
+
             g = hob.vertex_groups.new(name=gname)
             g.add((0, 1, 2), 1.0, "REPLACE")
         helper_parts.append(hob)
 
-# --- join rag + flame into bottle ---
+# --- join rag into bottle ---
 # chain weights BEFORE the join (groups merge by name): hang distance along the
-# straight line picks the two nearest links and blends them — the tail (even
-# solidified/beveled: weights are by position) and its fire shells land on the
-# SAME bones, so the flame swings with the cloth by construction. Pin and lip
-# verts (t <= 0) stay fully on jnt_fuse; plug, cap flames, glass stay rigid on
-# jnt_offset via the free-vert pass below.
+# straight line picks the two nearest links and blends them (weights are by
+# position, so the solidified/beveled tail stays coherent). Pin and lip verts
+# (t <= 0) stay fully on jnt_fuse; plug and glass stay rigid on jnt_offset via
+# the free-vert pass below.
 link_len = hang_len / HANG_LINKS
 
 
@@ -541,11 +428,10 @@ def assign_chain_weights(part):
         groups[CHAIN[lo_m]].add((v.index,), 1.0 - f, "REPLACE")
 
 
-for part in [tail] + [p for p in flame_parts if p.name.startswith("sheath_")]:
-    assign_chain_weights(part)
+assign_chain_weights(tail)
 bpy.ops.object.select_all(action="DESELECT")
 bottle.select_set(True)
-for part in rag_parts + flame_parts + helper_parts:
+for part in rag_parts + helper_parts:
     part.select_set(True)
 bpy.context.view_layer.objects.active = bottle
 bpy.ops.object.join()
@@ -561,16 +447,6 @@ with bpy.context.temp_override(
     object=bottle, active_object=bottle, selected_objects=[bottle]
 ):
     bpy.ops.object.modifier_apply(modifier="tri")
-
-# verify the flame-axis normals survived join + triangulate
-flame_slot = [m.name for m in bottle.data.materials].index("M_RagFlame")
-bottle.data.update()
-for poly in bottle.data.polygons:
-    if poly.material_index == flame_slot:
-        n = bottle.data.corner_normals[poly.loop_indices[0]].vector
-        print(f"TRACE flame normal: {tuple(round(v, 3) for v in n)}")
-        assert n[2] > 0.99, "flame-axis custom normals lost"
-        break
 
 # --- fuse chain: root at the mouth, then evenly spaced links down the straight
 # hang line. Each non-leaf bone's length comes from its child joint (FBX drops

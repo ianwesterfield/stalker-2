@@ -1,6 +1,6 @@
 # ZoneXM Companion privacy policy
 
-_Last updated: November 11, 2026_
+_Last updated: November 13, 2026_
 
 ZoneXM Companion ("the app") is a free Windows helper for the ZoneXM game mod. This policy
 explains what the app accesses and what it does with it.
@@ -28,7 +28,9 @@ not record or listen to audio.
 
 ## What is stored, and where
 
-All files live in `%LOCALAPPDATA%\ZoneXM` on your PC:
+Current files live in `%USERPROFILE%\ZoneXM` on your PC. This is a user-owned shared
+folder outside AppData; the app does not request the `unvirtualizedResources` capability
+or disable Windows' file virtualization.
 
 | File                   | Contents                                                                     | Kept                                                 |
 | ---------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -45,8 +47,15 @@ account can read it, and people watching your screen or stream can see in-game b
 forced termination can leave an expired file behind; the game ignores stale entries. Original
 Windows notifications are never modified or dismissed by the app.
 
-Because the game mod must read these files, Windows keeps the folder when the app is uninstalled.
-Delete `%LOCALAPPDATA%\ZoneXM` to remove everything.
+The shared folder is not removed when the app is uninstalled.
+Delete `%USERPROFILE%\ZoneXM` to remove its files.
+
+Versions before Companion 1.3.1 used `%LOCALAPPDATA%\ZoneXM`. On first use of the new
+folder, the app imports an existing valid `helper-settings.json` only if no new settings
+file exists. This preserves the duck level and exactly the apps you previously opted in;
+it does not import notification text, alert flags, media snapshots, or logs. Invalid old
+settings are reported rather than silently treated as consent. The old folder is left
+untouched; you can delete it separately after updating both the companion and game mod.
 
 ## Children
 

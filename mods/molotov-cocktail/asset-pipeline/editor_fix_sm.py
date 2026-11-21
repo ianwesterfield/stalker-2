@@ -1,5 +1,5 @@
 # Fix SM_MolotovBottle after import: droop-friendly build settings, assign all
-# 4 material slots by name, add simple collision, SAVE TO DISK, audit slots.
+# 3 material slots by name, add simple collision, SAVE TO DISK, audit slots.
 # Run in editor Output Log:  py "<this file>"
 import unreal
 
@@ -10,8 +10,6 @@ ASSIGN = {
     "MI_cns_cossacks_vodka_01_glass": f"{GAME_MATS}/MI_cns_cossacks_vodka_01_glass",
     "MI_cns_cossacks_vodka_01_02": f"{GAME_MATS}/MI_cns_cossacks_vodka_01_02",
     "MI_molotov_rag": f"{PLUGIN}/M_MolotovRag",
-    "M_RagFlame": f"{PLUGIN}/M_RagFlame",
-    "M_SheathFlame": f"{PLUGIN}/M_SheathFlame",
 }
 
 sm = unreal.EditorAssetLibrary.load_asset(SM_PATH)
@@ -46,7 +44,7 @@ for i, entry in enumerate(mats):
         assert mat, f"missing material {tgt}"
         sm.set_material(i, mat)
     else:
-        unreal.log_warning(f"[fixsm] unmapped slot name '{slot}'")
+        raise AssertionError(f"[fixsm] unmapped slot name '{slot}'")
     cur = sm.get_material(i)
     unreal.log(
         f"[fixsm] final slot {i} ({slot}): " f"{cur.get_path_name() if cur else 'NULL'}"

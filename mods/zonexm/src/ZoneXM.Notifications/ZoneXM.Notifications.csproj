@@ -17,8 +17,14 @@
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.6.5" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="2.6.5" />
   </ItemGroup>
+  <!-- C#/WinRT uses projection assemblies; SDK reference WinMDs are build inputs, not app components. -->
+  <Target Name="ExcludeSdkReferenceMetadata" BeforeTargets="AddMicrosoftWindowsAppSDKPayloadFilesFromComponents">
+    <ItemGroup>
+      <MicrosoftWindowsAppSDKFilesExcluded Include="%(WindowsAppSdkComponentPackages.Identity)metadata\**\*.winmd" />
+    </ItemGroup>
+  </Target>
   <!-- The external MSIX script needs the compiled Application resource, not just its PRI. -->
   <Target Name="PublishApplicationXaml" BeforeTargets="ComputeFilesToPublish">
     <ItemGroup>

@@ -1,0 +1,6 @@
+collapse_simple_statement = "Never"
+column_width = 110
+indent_type = "Spaces"
+indent_width = 4
+quote_style = "ForceDouble"
+syntax = "Lua54"

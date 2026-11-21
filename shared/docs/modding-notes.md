@@ -63,7 +63,7 @@ this is the _how_ and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS
 - Stale pak gotcha: UE mounts **any** pak under `Content\Paks` — renaming `~mods` does not
   disable it. A duplicate pak double-registered locres and broke item names.
 - cfgs have **no comment syntax** — no `--`, `//` or `#`. A comment header fails the parse.
-- cfgs can reference plugin assets: `Texture2D'/MolotovBottle/T_MolotovKitIcon...'` resolves
+- cfgs can reference plugin assets: `Texture2D'/MolotovBottle/T_MolotovIcon...'` resolves
   the same way the mesh prototypes already point at `/MolotovBottle/SK_MolotovBottle`.
 
 ## Quest scripting (the only inventory-removal verb)
@@ -86,7 +86,7 @@ this is the _how_ and the traps. Game version 2.0.x, UE 5.5, Zone Kit SDK, UE4SS
 - `refkey` also inherits the parent's `Launchers`. Override with an explicit empty
   `Launchers : struct.begin / struct.end` on any node that should only fire manually.
 - **An `If` node fired directly does NOT evaluate its Conditions** — it runs the True branch
-  regardless (a kit used with an empty pack still crafted). Gate in Lua instead.
+  regardless (a craft fired with an empty pack still crafted). Gate in Lua instead.
 - `PlaySound` takes an `AKEventPath` Wwise asset plus a `SoundLocation`; `0,0,0` is what
   vanilla uses for music, i.e. non-positional 2D.
 
@@ -223,6 +223,13 @@ cooks (stale pak cache).
   there is no global `IsValid` in this build. Validity is not ownership and does not
   guarantee that a component is still part of the current equip. Do not treat either
   address lookup or validity checking as a lifetime guarantee.
+- Widgets a mod creates (`WidgetBlueprintLibrary:Create`) die with the level. Re-check
+  `IsValid()` on every cached widget **and** whatever it hangs off before each call. Drop the
+  refs when the page or scene goes invalid. ZoneAtlas crashed the game (AV in
+  `FField::GetClass` under `UStruct::FindProperty`, game thread, Lua hook frames) by calling
+  `cap:IsHovered()` from an LMB click a few seconds after a level change. To attribute a
+  UE4SS AV in a minidump, dump the crashing thread's stack bytes (`.ecxr; db <rsp range>`)
+  and look for the property or function name being looked up (here `IsHovered`).
 - Delayed rag physics/fire jobs carry an equip generation. Douse/restore invalidates
   pending jobs before they touch captured objects. Jobs also verify the held item and
   that the mesh's current animation instance still matches. Montage state resets on
@@ -389,6 +396,55 @@ cooks (stale pak cache).
   (see `build/exe-scan.txt`). Call the UFunctions directly on live instances.
 - `DumpAllObjects()` while playing works (~0.7 s) — re-dump per session; it is the map of
   everything.
+
+## PDA world map (ZoneAtlas)
+
+- The PDA map is a scene capture, not a widget texture. `BP_WorldMapScene_C`
+  (`/Script/Stalker2.WorldMapScene`, in `WorldMap_WP`) has a `Map` StaticMeshComponent. Its
+  MID of `M_WorldMapSceneMaterial` samples the texture parameter **`MapTexture`**, which
+  `SceneCaptureComponent` renders into `RT_WorldMap`. `W_MapZoomContainer.MapTexture` is an
+  Image widget, a red herring.
+- Vanilla textures: `T_WorldMap_UDIM` (base, pakchunk16) and `T_DLCWorldMap_UDIM` (DLC1
+  container, 202 MB bulk, the one owners actually see). Map mods (Topographic, Topo Dark)
+  are Zone Kit NewContent containers shadowing `T_DLCWorldMap_UDIM`. They all share one path,
+  so only one can win.
+- Relocating a texture package without the editor: run `retoc to-legacy` (the input dir needs
+  `global.utoc/ucas` hardlinked beside the mod container). Then same-length byte-patch the
+  package path and object name in `.uasset` (the summary PackageName plus the name map; the
+  `.uexp` has neither). Rename the files to match, since retoc derives the package name from the
+  path, then run `to-zen --version UE5_5`. The round trip is byte-identical. Name-map hashes go
+  stale harmlessly.
+- retoc 0.1.5 `to-zen` never compresses, so a 71 MB Topo Dark ucas becomes 3.2 GB.
+- UE4SS `LoadAsset(path)` fails ("can't load") for retoc-built packages: it goes through the
+  asset registry, and those packages have no registry entry. Use
+  `StaticFindObject("/Script/AssetRegistry.Default__AssetRegistryHelpers"):GetAsset({ PackageName
+  = FName, AssetName = FName })`, which is FAssetData::GetAsset → LoadObject by path, the same call
+  BPModLoaderMod makes. A cached texture can be GC'd and recycled, so re-check its path before reuse.
+- Mod Configuration Menu 2.0 from Lua: the manager is `BP_MCM_Manager_C`, spawned per level and
+  only in `WorldMap_WP`, so find it with FindAllOf and skip `Default__`. Call
+  `AddUniqueModID(ModID)` every few seconds, because the menu lists only IDs added this session.
+  `RegisterModSetting` takes 20 params: ModID, SettingID, HoverText, ModHeaderTex, Author,
+  Category, CategoryHeaderTex, Type (0 = Bool), Bool, Int, Float, FloatStep, String, Transform,
+  Vector, Rotator, ComboOptions (string array), ComboSelected, Keybind (a string), ButtonText.
+  `RegisterDefaultModSetting` takes the same params.
+  - Registering only appends new (ModID, SettingID) pairs; there is no remove.
+  - The SettingID is the label shown in the menu.
+  - Values persist in the save game.
+  - To read values, poll `mgr.AllSettings` (an `ST_MCM_ModSetting` array). Its fields have GUID
+    suffixes (`ModID_19_…`, `SettingID_20_…`, `BoolValue_18_…`), so match them by prefix.
+- MCM's hotkey is **F9**. Any other UE4SS mod bound to F9 also fires while MCM opens. A
+  `DumpAllObjects` on F9 (old MolotovFire/ZoneLink dev binds) froze the game, with MCM itself
+  logging nothing. Use the built-in Keybinds `ObjectDumper` (Ctrl+J) for dumps instead.
+- Map mods packed before the 2.0 (UE 5.5) update fail `retoc to-legacy` with "different versions
+  PerfectHashWithOverflow and ReplaceIoChunkHashWithIoHash" against the current `global.utoc`.
+  They were cooked for the old engine, so the ZoneAtlas builder skips them with a warning.
+- PDA map hint bar: `W_MapPage_C` has `MoveToPlayerPositionHint`, `ShowLegendHint`, and others,
+  as `W_HintInputController_C` in the HorizontalBox `ContextualHintsBox`. Each holds
+  `PlatformSwitcher` → active view → `HintIconImage`. On keyboard that is a
+  `W_HintImageKeyboard_C` with HintBackground and HintImage (Image) and HintChar (RichTextBlock).
+  Its label is `LeftText`/`RightText` (`W_Text_C`). There are no native setters for an arbitrary
+  key, so ZoneAtlas builds its own `W_HintImageKeyboard_C` and `W_Text_C`, then copies the brush
+  and text style from a live hint.
 
 ## Trade / misc
 

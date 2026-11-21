@@ -15,9 +15,20 @@ internal sealed record HelperSettings
             throw new InvalidDataException("Invalid helper settings.");
     }
 
-    internal static HelperSettings Load(string path)
+    internal static HelperSettings Load(string path, string? legacyPath = null)
     {
-        if (!File.Exists(path)) return new();
+        if (!File.Exists(path))
+        {
+            if (legacyPath is not null && File.Exists(legacyPath))
+            {
+                var legacySettings = Load(legacyPath);
+                legacySettings.Save(path);
+                return legacySettings;
+            }
+
+            return new();
+        }
+
         var settings = JsonSerializer.Deserialize<HelperSettings>(File.ReadAllText(path))
             ?? throw new InvalidDataException("Missing helper settings.");
         settings.Validate();

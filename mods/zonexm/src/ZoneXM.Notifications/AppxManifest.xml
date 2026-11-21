@@ -3,20 +3,12 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
-  xmlns:virtualization="http://schemas.microsoft.com/appx/manifest/virtualization/windows10" IgnorableNamespaces="uap uap3 rescap desktop6 virtualization">
-  <Identity Name="ZoneXM.Notifications" Publisher="CN=ZoneXM" Version="1.3.0.0" ProcessorArchitecture="x64" />
+  IgnorableNamespaces="uap uap3 rescap">
+  <Identity Name="ZoneXM.Notifications" Publisher="CN=ZoneXM" Version="1.3.1.0" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>ZoneXM Companion</DisplayName>
     <PublisherDisplayName>ZoneXM</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <!-- The game mod reads and writes this folder, so the package must not redirect it. -->
-    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
-    <virtualization:FileSystemWriteVirtualization>
-      <virtualization:ExcludedDirectories>
-        <virtualization:ExcludedDirectory>$(KnownFolder:LocalAppData)\ZoneXM</virtualization:ExcludedDirectory>
-      </virtualization:ExcludedDirectories>
-    </virtualization:FileSystemWriteVirtualization>
   </Properties>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
@@ -31,7 +23,6 @@
   </Applications>
   <Capabilities>
     <rescap:Capability Name="runFullTrust" />
-    <rescap:Capability Name="unvirtualizedResources" />
     <uap3:Capability Name="userNotificationListener" />
   </Capabilities>
 </Package>

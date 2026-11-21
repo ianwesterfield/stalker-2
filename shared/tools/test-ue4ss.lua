@@ -1,8 +1,13 @@
 local root = arg[1] or "Gaming/stalker-2"
-local modFolders = { MolotovFire = "molotov-cocktail", ZoneXM = "zonexm" }
+local modFolders = { MolotovFire = "molotov-cocktail", ZoneAtlas = "zoneatlas", ZoneXM = "zonexm" }
+local nativeOpen = io.open
 
-local function loadMod(name, exports)
+local function loadMod(name, exports, configure)
     local state = { timers = {}, delayed = {}, queue = {}, logs = {}, reads = 0, violations = 0 }
+    state.bindings = {}
+    local scriptDirectory = root .. "/mods/" .. modFolders[name] .. "/ue4ss/" .. name .. "/Scripts"
+    local moduleCache = {}
+
     local function objectRead()
         state.reads = state.reads + 1
         if not state.onGameThread then state.violations = state.violations + 1 end
@@ -10,18 +15,40 @@ local function loadMod(name, exports)
     local function forbidden()
         error("Async scheduling is forbidden in these mods")
     end
+
+    local function loadModule(moduleName)
+        if moduleName == "UEHelpers" then
+            return {
+                GetPlayerController = function()
+                    objectRead()
+                    return state.controller
+                end,
+            }
+        end
+        if moduleCache[moduleName] then return moduleCache[moduleName] end
+
+        local modulePath = scriptDirectory .. "/" .. moduleName .. ".lua"
+        local moduleFile = assert(nativeOpen(modulePath, "rb"))
+        local moduleSource = moduleFile:read("*a")
+        moduleFile:close()
+        moduleCache[moduleName] = assert(load(moduleSource, "@" .. modulePath, "t", state.env))()
+        return moduleCache[moduleName]
+    end
+
     state.env = setmetatable({
         print = function(message) state.logs[#state.logs + 1] = message end,
-        require = function(name)
-            assert(name == "UEHelpers")
-            return { GetPlayerController = function() objectRead(); return state.controller end }
-        end,
+        require = loadModule,
         RegisterHook = function() end,
-        RegisterKeyBind = function(key, callback)
+        RegisterKeyBind = function(key, callbackOrModifiers, modifierCallback)
+            local callback = modifierCallback or callbackOrModifiers
+            if key then state.bindings[modifierCallback and ("SHIFT+" .. key) or key] = callback end
             if key == "LEFT_MOUSE_BUTTON" then state.click = callback end
         end,
-        Key = { LEFT_MOUSE_BUTTON = "LEFT_MOUSE_BUTTON" }, ModifierKey = {},
-        LoopAsync = forbidden, ExecuteWithDelay = forbidden, ExecuteAsync = forbidden,
+        Key = { F6 = "F6", LEFT_MOUSE_BUTTON = "LEFT_MOUSE_BUTTON" },
+        ModifierKey = { SHIFT = "SHIFT" },
+        LoopAsync = forbidden,
+        ExecuteWithDelay = forbidden,
+        ExecuteAsync = forbidden,
         LoopInGameThreadWithDelay = function(delay, callback)
             state.timers[#state.timers + 1] = { delay = delay, callback = callback }
             return #state.timers
@@ -36,16 +63,31 @@ local function loadMod(name, exports)
             return #state.delayed
         end,
         ExecuteInGameThread = function(callback) state.queue[#state.queue + 1] = callback end,
-        FindAllOf = function() objectRead(); return {} end,
-        FindFirstOf = function() objectRead(); return nil end,
-        StaticFindObject = function() objectRead(); return nil end,
-        io = { open = function(_, mode)
-            if mode == "rb" then return nil, "not found", 2 end
-            error("Unexpected flag write")
-        end },
+        FindAllOf = function()
+            objectRead()
+            return {}
+        end,
+        FindFirstOf = function()
+            objectRead()
+            return nil
+        end,
+        StaticFindObject = function()
+            objectRead()
+            return nil
+        end,
+        io = {
+            open = function(_, mode)
+                if mode == "rb" then return nil, "not found", 2 end
+                if name == "ZoneAtlas" and mode == "r" then return nil, "not found", 2 end
+                error("Unexpected flag write")
+            end,
+        },
     }, { __index = _G })
-    local path = root .. "/mods/" .. modFolders[name] .. "/ue4ss/" .. name .. "/Scripts/main.lua"
-    local file = assert(io.open(path))
+
+    if configure then configure(state) end
+
+    local path = scriptDirectory .. "/main.lua"
+    local file = assert(nativeOpen(path, "rb"))
     local source = file:read("*a")
     file:close()
     state.exports = assert(load(source .. "\n" .. (exports or ""), "@" .. path, "t", state.env))()
@@ -59,7 +101,9 @@ local function loadMod(name, exports)
     function state:drain(field)
         local ready = self[field]
         self[field] = {}
-        for _, callback in ipairs(ready) do self:run(callback) end
+        for _, callback in ipairs(ready) do
+            self:run(callback)
+        end
     end
     function state:check()
         assert(self.violations == 0, "UObject read outside game thread")
@@ -70,13 +114,319 @@ local function loadMod(name, exports)
     return state
 end
 
+local zoneAtlas = loadMod("ZoneAtlas", "")
+assert(#zoneAtlas.timers == 1)
+assert(zoneAtlas:run(zoneAtlas.timers[1].callback) == false)
+zoneAtlas:check()
+print("PASS: ZoneAtlas loads mod-local modules and polls safely")
+
+local originalLoadfile = zoneAtlas.env.loadfile
+zoneAtlas.env.loadfile = function(path)
+    if path:find("config.lua", 1, true) then
+        return function() return { Key = 42, ToastSeconds = "invalid" } end
+    end
+    if path:find("atlas_manifest.lua", 1, true) then
+        return function()
+            return {
+                { name = "Test map", texture = "/Game/Test.Test" },
+                { name = false, texture = "/Game/Invalid.Invalid" },
+            }
+        end
+    end
+    return originalLoadfile(path)
+end
+local testCatalog = zoneAtlas.env.require("catalog").load("test/ZoneAtlas")
+zoneAtlas.env.loadfile = originalLoadfile
+assert(testCatalog.config.Key == "F6" and testCatalog.config.ToastSeconds == 2.5)
+assert(#testCatalog.entries == 2 and testCatalog.ownedPaths["/Game/Test.Test"])
+local invalidKeyLogged = false
+local invalidManifestLogged = false
+for _, message in ipairs(zoneAtlas.logs) do
+    invalidKeyLogged = invalidKeyLogged or message:find("invalid config value for Key", 1, true) ~= nil
+    invalidManifestLogged = invalidManifestLogged or message:find("invalid atlas manifest entry", 1, true) ~= nil
+end
+assert(invalidKeyLogged and invalidManifestLogged)
+print("PASS: ZoneAtlas validates config types and skips malformed manifest entries")
+
+local function atlasFixture(config, configure)
+    return loadMod("ZoneAtlas", "", function(state)
+        local function object(path)
+            return {
+                IsValid = function(self)
+                    if not state.onGameThread then state.violations = state.violations + 1 end
+                    assert(state.onGameThread, "ZoneAtlas UObject access outside game thread")
+                    return not self.destroyed
+                end,
+                GetFullName = function() return "Object " .. path end,
+            }
+        end
+
+        state.assets = {}
+        for _, name in ipairs({ "Default", "Satellite", "Topographic", "Mismatch" }) do
+            local path = "/Game/" .. name .. "." .. name
+            state.assets[path] = object(path)
+            state.assets[path].VirtualTextureStreaming = name == "Mismatch"
+        end
+
+        local material = object("MapMaterial")
+        material.GetClass = function()
+            return { GetFName = function()
+                return { ToString = function() return "MaterialInstanceDynamic" end }
+            end }
+        end
+        material.texture = state.assets["/Game/Default.Default"]
+        material.K2_GetTextureParameterValue = function(self) return self.texture end
+        material.SetTextureParameterValue = function(self, _, texture)
+            self.texture = texture
+            state.swaps = state.swaps + 1
+        end
+        state.material, state.swaps, state.time = material, 0, 0
+        state.scene = object("WorldMapScene")
+        state.scene.Map = object("MapMesh")
+        state.scene.Map.GetMaterial = function() return material end
+        state.scene.SceneCaptureComponent = { bCaptureEveryFrame = true }
+        state.settings = {}
+        state.manager = object("MCMManager")
+        state.manager.AllSettings = { ForEach = function(_, callback)
+            for name, enabled in pairs(state.settings) do
+                callback(1, { get = function()
+                    return {
+                        ModID_19_16F2EB904B3610C78A68FE94C1064C9B = {
+                            ToString = function() return "ZoneAtlas" end,
+                        },
+                        SettingID_20_5CDB958A4AF1113D73FA76BF15153E78 = {
+                            ToString = function() return name end,
+                        },
+                        BoolValue_18_561E7B474E51CDC6C657A89251AA5995 = enabled,
+                    }
+                end })
+            end
+        end }
+        state.manager.GetClass = function() return object("MCMManagerClass") end
+        state.manager.AddUniqueModID = function() end
+        state.manager.RegisterModSetting = function(_, _, name)
+            state.settings[name] = true
+        end
+        state.manager.RegisterDefaultModSetting = function() end
+        state.env.FindFirstOf = function() return state.scene end
+        state.env.FindAllOf = function(class)
+            return class == "BP_MCM_Manager_C" and { state.manager } or {}
+        end
+        state.env.StaticFindObject = function(path)
+            if path == "/ModConfigurationMenu/BP_MCM_Manager.BP_MCM_Manager_C" then
+                return state.manager
+            end
+            return state.assets[path]
+        end
+        state.env.os = { clock = function() return state.time end }
+        state.env.FName = function(name) return name end
+        state.env.loadfile = function(path)
+            return function()
+                if path:find("config.lua", 1, true) then
+                    return config or { ShowHint = false, ToastSeconds = 0, UseMCM = false }
+                end
+                return {
+                    { name = "Satellite", texture = "/Game/Satellite.Satellite" },
+                    { name = "Topographic", texture = "/Game/Topographic.Topographic" },
+                    { name = "Mismatch", texture = "/Game/Mismatch.Mismatch" },
+                }
+            end
+        end
+        state.env.io.open = function(_, mode)
+            if mode == "r" then return nil end
+            return {
+                write = function(self, value)
+                    state.savedName = value
+                    return self
+                end,
+                close = function() return true end,
+            }
+        end
+
+        function state:poll()
+            self.time = self.time + 1
+            self:run(self.timers[1].callback)
+        end
+
+        if configure then configure(state, object) end
+    end)
+end
+
+local atlas = atlasFixture()
+atlas:poll()
+atlas.bindings.F6()
+assert(atlas.swaps == 0, "A key callback accessed Unreal instead of queueing an intent")
+atlas:poll()
+assert(atlas.swaps == 0, "The Shift grace tick was lost")
+atlas:poll()
+assert(atlas.savedName == "Satellite" and atlas.swaps == 1)
+local collectedTexture = atlas.assets["/Game/Satellite.Satellite"]
+collectedTexture.destroyed = true
+local reloadedTexture = {
+    IsValid = collectedTexture.IsValid,
+    GetFullName = collectedTexture.GetFullName,
+    VirtualTextureStreaming = false,
+}
+atlas.assets["/Game/Satellite.Satellite"] = reloadedTexture
+atlas:poll()
+assert(atlas.material.texture == reloadedTexture, "A collected texture was not reloaded")
+atlas.bindings.F6()
+atlas.bindings["SHIFT+F6"]()
+atlas:poll()
+atlas:poll()
+assert(atlas.savedName == "Game default", "Shift and plain binds advanced twice")
+atlas.bindings["SHIFT+F6"]()
+atlas:poll()
+atlas:poll()
+assert(atlas.savedName == "Topographic", "A mismatched virtual texture entered the cycle")
+atlas.scene.destroyed = true
+atlas.env.FindFirstOf = function() return nil end
+atlas:poll()
+atlas:check()
+print("PASS: ZoneAtlas queues input, persists selection, skips unsafe textures, reloads collected assets, and survives scene loss")
+
+local atlasMCM = atlasFixture({ ShowHint = false, ToastSeconds = 0 })
+atlasMCM:poll()
+atlasMCM.bindings.F6()
+atlasMCM:poll()
+atlasMCM:poll()
+assert(atlasMCM.savedName == "Satellite")
+atlasMCM.settings.Satellite = false
+atlasMCM.settings.Topographic = true
+atlasMCM.settings.Mismatch = false
+atlasMCM.settings["Game default"] = false
+for _ = 1, 5 do atlasMCM:poll() end
+assert(atlasMCM.savedName == "Topographic", "MCM did not move away from a disabled map")
+for name in pairs(atlasMCM.settings) do atlasMCM.settings[name] = false end
+atlasMCM:poll()
+atlasMCM.bindings.F6()
+atlasMCM:poll()
+atlasMCM:poll()
+assert(atlasMCM.savedName == "Game default", "An empty MCM selection did not restore the full cycle")
+atlasMCM:check()
+print("PASS: ZoneAtlas honors MCM filtering and the empty-selection fallback")
+
+local atlasUI = atlasFixture({ ShowHint = true, ToastSeconds = 2, UseMCM = false }, function(state, object)
+    local capClass = object("KeyCapClass")
+    local function widget()
+        local result = object("Widget")
+        result.ColorAndOpacity = {
+            R = 1, G = 1, B = 1, A = 1,
+            SpecifiedColor = { R = 1, G = 1, B = 1, A = 1 }, ColorUseRule = 0,
+        }
+        result.Font, result.TextSettings = "PDAFont", {}
+        result.CommonTextObj = result
+        result.GetVisibility = function(self) return self.visibility or 0 end
+        result.SetVisibility = function(self, visibility) self.visibility = visibility end
+        result.GetText = function(self) return { ToString = function() return self.text or "" end } end
+        result.SetText = function(self, text) self.text = text end
+        result.IsHovered = function(self) return self.hovered == true end
+        result.GetClass = function() return capClass end
+        result.SetFont = function(self, font) self.Font = font end
+        result.SetColorAndOpacity = function(self, color) self.ColorAndOpacity = color end
+        result.SetTextTransformPolicy = function(self, policy) self.TextTransformPolicy = policy end
+        result.SetJustification = function(self, value) self.justification = value end
+        result.SetShadowOffset = function(self, value) self.shadowOffset = value end
+        result.SetShadowColorAndOpacity = function(self, value) self.shadowColor = value end
+        result.AddToViewport = function(self, layer) self.layer = layer end
+        result.SetDesiredSizeInViewport = function(self, value) self.size = value end
+        result.SetAnchorsInViewport = function(self, value) self.anchors = value end
+        result.SetAlignmentInViewport = function(self, value) self.alignment = value end
+        result.SetPositionInViewport = function(self, value, removeDPI)
+            self.position, self.removeDPI = value, removeDPI
+        end
+        result.RemoveFromParent = function(self) self.removed = true end
+        return result
+    end
+    local row = object("HintRow")
+    row.AddChild = function(_, child)
+        state.children[#state.children + 1] = child
+        return {
+            SetPadding = function(_, value) child.padding = value end,
+            SetVerticalAlignment = function(_, value) child.vertical = value end,
+            SetSize = function(_, value) child.slotSize = value end,
+        }
+    end
+    local source, sourceCap, sourceView = widget(), widget(), object("KeyboardView")
+    sourceCap.HintChar = widget()
+    sourceCap.HintChar.text = "P"
+    sourceView.HintIconImage = sourceCap
+    source.GetParent = function() return row end
+    source.PlatformSwitcher = object("Switcher")
+    source.PlatformSwitcher.GetActiveWidget = function() return sourceView end
+    source.RightText = widget()
+    source.RightText.text = "Existing prompt"
+    source.Slot = { Padding = { Left = 4, Top = 2, Right = 4, Bottom = 2 } }
+    state.page = object("MapPage")
+    state.page.MoveToPlayerPositionHint = source
+    state.children, state.created = {}, {}
+    state.controller = object("PlayerController")
+    state.env.FText = function(text) return text end
+    state.env.NotifyOnNewObject = function(_, callback) state.notify = callback end
+    local library = object("WidgetLibrary")
+    library.Create = function(_, _, class)
+        local created = widget()
+        if class == capClass then created.HintChar = widget() end
+        state.created[#state.created + 1] = created
+        return created
+    end
+    local layout = object("LayoutLibrary")
+    layout.GetViewportSize = function() return { X = 1920, Y = 1080 } end
+    layout.GetViewportScale = function() return 2 end
+    local findObject = state.env.StaticFindObject
+    state.env.StaticFindObject = function(path)
+        if path == "/Script/UMG.Default__WidgetBlueprintLibrary" then return library end
+        if path == "/Script/UMG.Default__WidgetLayoutLibrary" then return layout end
+        if path == "/Game/GameLite/FPS_Game/UIRemaster/CommonWidgets/W_Text.W_Text_C" then
+            return object("TextClass")
+        end
+        return findObject(path)
+    end
+    state.setKeyboard = function(enabled) sourceView.HintIconImage = enabled and sourceCap or nil end
+end)
+atlasUI.notify(atlasUI.page)
+atlasUI:poll()
+atlasUI:poll()
+local hintCap, hintLabel = atlasUI.children[1], atlasUI.children[2]
+assert(hintCap.HintChar.text == "F6" and hintLabel.text == "Map style")
+assert(hintLabel.Font == "PDAFont" and hintCap.padding.Left == 4 and hintLabel.vertical == 2)
+atlasUI.setKeyboard(false)
+atlasUI:poll()
+assert(hintCap.visibility == 1 and hintLabel.visibility == 1, "Gamepad view did not collapse the keyboard hint")
+atlasUI.setKeyboard(true)
+atlasUI:poll()
+assert(hintCap.visibility == 0 and hintLabel.visibility == 0)
+hintCap.hovered = true
+atlasUI.click()
+atlasUI:poll()
+assert(atlasUI.savedName == "Satellite", "Clicking the hint did not cycle the map")
+local toast = atlasUI.created[#atlasUI.created]
+assert(toast.text == "Satellite  (2/4)" and toast.visibility == 4 and toast.layer == 1000)
+assert(toast.size.X == 640 and toast.position.X == 160 and toast.position.Y == 32.4)
+assert(toast.removeDPI == false and toast.anchors.Minimum.X == 0)
+atlasUI:poll()
+atlasUI:poll()
+assert(toast.removed, "Toast did not expire")
+hintCap.destroyed = true
+atlasUI:poll()
+assert(atlasUI.children[3] ~= hintCap, "A stale key-cap widget was not rebuilt")
+atlasUI.scene.destroyed = true
+atlasUI.env.FindFirstOf = function() return nil end
+atlasUI:poll()
+atlasUI:check()
+print("PASS: ZoneAtlas preserves native hints, keyboard/gamepad switching, clicks, DPI-aware toasts, expiry, and widget recovery")
+
 local molotovExports = [[
-return { douse = douseRagFire, restore = fpRestore, fp = fp, mp = mp,
-    injectCraft = injectCraftEntry, craftSelection = craftSelection, menuCraft = menuCraft,
-    setCraftFire = function(callback) craftFire = callback end,
-    physics = kickRagPhysics, fire = ragFire, currentMesh = currentRagMesh,
-    disableHoldBurn = function() HOLD_BURN_ENABLED = false end,
-    expireQuietBanners = function() QUIET_BANNERS = true; quietBanners(-1) end }
+local CraftMenu = require("craft_menu")
+local Crafting = require("crafting")
+local Hands = require("hands")
+local HoldBurn = require("hold_burn")
+local RagFire = require("rag_fire")
+return { douse = RagFire.douse, restore = Hands.restore, fp = Hands.fp, mp = Hands.mp,
+    injectCraft = CraftMenu.injectEntry, craftSelection = CraftMenu.craftSelection, menuCraft = CraftMenu.state,
+    setCraftFire = function(callback) Crafting.craft = callback end,
+    physics = RagFire.kickPhysics, fire = RagFire.light, currentMesh = Hands.currentRagMesh,
+    disableHoldBurn = function() HoldBurn.isEnabled = false end }
 ]]
 
 local molotov = loadMod("MolotovFire", molotovExports)
@@ -98,11 +448,6 @@ for _, timer in ipairs(molotov.timers) do
         assert(timer.cancelled, "Disabled hold-burn timer was not cancelled")
     end
 end
-molotov.exports.expireQuietBanners()
-local quietTimer = molotov.timers[#molotov.timers]
-assert(quietTimer.delay == 200)
-molotov:run(quietTimer.callback)
-assert(quietTimer.cancelled, "Expired banner timer was not cancelled")
 print("PASS: finite native timers use explicit handle cancellation")
 
 for _, cleanup in ipairs({ "douse", "restore" }) do
@@ -110,7 +455,12 @@ for _, cleanup in ipairs({ "douse", "restore" }) do
         local state = loadMod("MolotovFire", molotovExports)
         local api = state.exports
         local touches = 0
-        local anim = { IsValid = function() touches = touches + 1; return true end }
+        local anim = {
+            IsValid = function()
+                touches = touches + 1
+                return true
+            end,
+        }
         api.physics(anim, 1)
         api.fire(anim, 1)
         if alreadyQueued then state:drain("delayed") end
@@ -176,14 +526,22 @@ local iconName = "T_cns_cossacks_vodka_01"
 local texture = craftObject(70)
 texture.GetFullName = function()
     return "Texture2D /Game/GameLite/FPS_Game/UIRemaster/UITextures/Inventory/Consumable/"
-        .. iconName .. "." .. iconName
+        .. iconName
+        .. "."
+        .. iconName
 end
-material.TextureParameterValues = { ForEach = function(_, callback)
-    callback(1, { get = function()
-        return { ParameterInfo = { Name = { ToString = function() return "Icon" end } },
-            ParameterValue = texture }
-    end })
-end }
+material.TextureParameterValues = {
+    ForEach = function(_, callback)
+        callback(1, {
+            get = function()
+                return {
+                    ParameterInfo = { Name = { ToString = function() return "Icon" end } },
+                    ParameterValue = texture,
+                }
+            end,
+        })
+    end,
+}
 craft.env.FindAllOf = function(class) return class == "InventoryNew" and { inventory } or {} end
 local vodka, bandages, rows, crafts, removedRows = 1, 1, 0, 0, 0
 local mediator = craftObject(80)
@@ -198,14 +556,16 @@ inventory.HideRightClickMenu = function() end
 craft.env.StaticFindObject = function(path)
     if path == "/Script/Stalker2.Default__CppMediator" then return mediator end
     assert(path == "/Script/UMG.Default__WidgetBlueprintLibrary")
-    return { Create = function()
-        local row = craftObject(110)
-        row.Label = { SetText = function() end }
-        row.IsHovered = function() return true end
-        row.OnButtonUnHovered, row.OnButtonHovered = function() end, function() end
-        row.RemoveFromParent = function() removedRows = removedRows + 1 end
-        return row
-    end }
+    return {
+        Create = function()
+            local row = craftObject(110)
+            row.Label = { SetText = function() end }
+            row.IsHovered = function() return true end
+            row.OnButtonUnHovered, row.OnButtonHovered = function() end, function() end
+            row.RemoveFromParent = function() removedRows = removedRows + 1 end
+            return row
+        end,
+    }
 end
 craft.exports.setCraftFire(function(_, sid, done)
     assert(sid == "MolotovCraft_TakeVodka")
@@ -232,16 +592,24 @@ for _, other in ipairs({ "T_cns_pills_03", "T_cns_food_01", "T_cns_bandage_01_cu
     assert(not craft.exports.menuCraft.entry, "Unrelated item received a craft row")
 end
 iconName = "T_cns_bandage_01"
-vodka = 0; inject(); vodka = 1
-bandages = 0; inject(); bandages = 1
+vodka = 0
+inject()
+vodka = 1
+bandages = 0
+inject()
+bandages = 1
 assert(rows == 2, "Missing ingredients must suppress the row")
 inject()
-vodka = 0; click(); vodka = 1
+vodka = 0
+click()
+vodka = 1
 assert(crafts == 2, "Click must recheck ingredient counts")
 inject()
-iconName = "T_cns_pills_03"; click()
+iconName = "T_cns_pills_03"
+click()
 assert(crafts == 2 and not craft.exports.menuCraft.entry, "Stale selection crafted")
-iconName = "T_cns_bandage_01"; inject()
+iconName = "T_cns_bandage_01"
+inject()
 inventory.RightClickMenuWidget = craftObject(999)
 click()
 assert(crafts == 2, "Stale menu crafted")
@@ -270,7 +638,38 @@ assert(not craft.exports.menuCraft.entry, "Closed menu received a row")
 craft:check()
 print("PASS: crafting requires selected vodka/bandage, ingredients, and the current visible menu")
 
-local zone = loadMod("ZoneXM", "return { pollBanner = pollBanner, readTrack = readTrack, readNotification = readNotification, bannerLine = bannerLine, bannerText = bannerText }")
+local zone = loadMod(
+    "ZoneXM",
+    [[
+return {
+    bannerLine = Banner.truncateLine,
+    bannerText = function(event)
+        local firstLine, secondLine = Banner.parts(event)
+        return firstLine .. secondLine
+    end,
+    pollBanner = Banner.tick,
+    readNotification = Bridge.readNotification,
+    readTrack = Bridge.readTrack,
+}
+]],
+    function(state)
+        state.env.os = setmetatable({
+            getenv = function(name)
+                assert(name == "USERPROFILE", "ZoneXM must not use a virtualized AppData bridge")
+                return "C:\\ZoneXM Test User"
+            end,
+            remove = function(path)
+                assert(path == "C:\\ZoneXM Test User\\ZoneXM\\alert.flag")
+                return true
+            end,
+        }, { __index = os })
+        local originalOpen = state.env.io.open
+        state.env.io.open = function(path, mode)
+            assert(path:find("C:\\ZoneXM Test User\\ZoneXM\\", 1, true) == 1)
+            return originalOpen(path, mode)
+        end
+    end
+)
 assert(#zone.timers == 2 and zone.reads == 0)
 zone.controller = {
     IsValid = function() return true end,
@@ -280,7 +679,9 @@ zone.controller = {
         K2_GetActorLocation = function() return { X = 0, Y = 0, Z = 0 } end,
     },
 }
-for _, timer in ipairs(zone.timers) do assert(zone:run(timer.callback) == false) end
+for _, timer in ipairs(zone.timers) do
+    assert(zone:run(timer.callback) == false)
+end
 assert(zone.reads > 0)
 zone:check()
 print("PASS: ZoneXM polls Unreal objects on native game-thread timers")
@@ -290,21 +691,27 @@ zone.controller.GetAddress = function() return 123 end
 zone.env.FText = function(text) return text end
 zone.env.FName = function(text) return text end
 local function openSnapshot(path, mode)
+    assert(path:find("C:\\ZoneXM Test User\\ZoneXM\\", 1, true) == 1, "ZoneXM used a different shared folder")
     if path:match("subtitle%-style%.txt$") then
         if mode == "wb" then
             local buffer = {}
-            return { write = function(self, text) buffer[#buffer + 1] = text return self end,
-                close = function() styleSnapshot = table.concat(buffer) end }
+            return {
+                write = function(self, text)
+                    buffer[#buffer + 1] = text
+                    return self
+                end,
+                close = function() styleSnapshot = table.concat(buffer); return true end,
+            }
         end
         assert(mode == "rb")
         if not styleSnapshot then return nil, "not found", 2 end
-        return { read = function(_, count) return styleSnapshot:sub(1, count) end, close = function() end }
+        return { read = function(_, count) return styleSnapshot:sub(1, count) end, close = function() return true end }
     end
     assert(mode == "rb")
     local data = snapshot
     if path:match("notification%.txt$") then data = notificationSnapshot end
     if not data then return nil, "not found", 2 end
-    return { read = function(_, count) return data:sub(1, count) end, close = function() end }
+    return { read = function(_, count) return data:sub(1, count) end, close = function() return true end }
 end
 zone.env.io.open = openSnapshot
 local function noop() end
@@ -322,23 +729,48 @@ local speakerOutline = asset("MaterialInstanceConstant", "/Game/UI/Materials/MI_
 local bodyOutline = asset("MaterialInstanceConstant", "/Game/UI/Materials/MI_BodyOutline.MI_BodyOutline")
 local viewport, viewportScale = { X = 3440, Y = 1440 }, 4 / 3
 local speakerStyle = {
-    IsValid = valid, Font = { Size = 20, FontObject = subtitleFont, FontMaterial = speakerMaterial,
-        TypefaceFontName = "Bold", LetterSpacing = 2,
-        OutlineSettings = { OutlineSize = 1, OutlineMaterial = speakerOutline,
-            bApplyOutlineToDropShadows = true, OutlineColor = { R = 0, G = 0, B = 0, A = 1 } } },
+    IsValid = valid,
+    Font = {
+        Size = 20,
+        FontObject = subtitleFont,
+        FontMaterial = speakerMaterial,
+        TypefaceFontName = "Bold",
+        LetterSpacing = 2,
+        OutlineSettings = {
+            OutlineSize = 1,
+            OutlineMaterial = speakerOutline,
+            bApplyOutlineToDropShadows = true,
+            OutlineColor = { R = 0, G = 0, B = 0, A = 1 },
+        },
+    },
     ColorAndOpacity = { SpecifiedColor = { R = 1, G = 0.55, B = 0, A = 1 } },
-    ShadowOffset = { X = 1, Y = 1 }, ShadowColorAndOpacity = { R = 0, G = 0, B = 0, A = 1 },
+    ShadowOffset = { X = 1, Y = 1 },
+    ShadowColorAndOpacity = { R = 0, G = 0, B = 0, A = 1 },
 }
 local bodyStyle = {
-    IsValid = valid, Font = { Size = 20, FontObject = subtitleFont, FontMaterial = bodyMaterial,
-        TypefaceFontName = "Bold", LetterSpacing = 2,
-        OutlineSettings = { OutlineSize = 1, OutlineMaterial = bodyOutline,
-            bApplyOutlineToDropShadows = true, OutlineColor = { R = 0, G = 0, B = 0, A = 1 } } },
+    IsValid = valid,
+    Font = {
+        Size = 20,
+        FontObject = subtitleFont,
+        FontMaterial = bodyMaterial,
+        TypefaceFontName = "Bold",
+        LetterSpacing = 2,
+        OutlineSettings = {
+            OutlineSize = 1,
+            OutlineMaterial = bodyOutline,
+            bApplyOutlineToDropShadows = true,
+            OutlineColor = { R = 0, G = 0, B = 0, A = 1 },
+        },
+    },
     ColorAndOpacity = { SpecifiedColor = { R = 1, G = 1, B = 1, A = 1 }, ColorUseRule = 0 },
-    ShadowOffset = { X = 1, Y = 1 }, ShadowColorAndOpacity = { R = 0, G = 0, B = 0, A = 1 },
+    ShadowOffset = { X = 1, Y = 1 },
+    ShadowColorAndOpacity = { R = 0, G = 0, B = 0, A = 1 },
 }
-local subtitleView = { IsValid = valid, SpeakerDialogText = { IsValid = valid, CommonTextObj = speakerStyle },
-    TextDialog = { IsValid = valid, CommonTextObj = bodyStyle } }
+local subtitleView = {
+    IsValid = valid,
+    SpeakerDialogText = { IsValid = valid, CommonTextObj = speakerStyle },
+    TextDialog = { IsValid = valid, CommonTextObj = bodyStyle },
+}
 local subtitleCandidates = {}
 zone.env.FindAllOf = function(class)
     assert(zone.onGameThread and class == "SubtitleView")
@@ -355,62 +787,77 @@ zone.env.StaticFindObject = function(path)
     assert(zone.onGameThread)
     if path:find("GameplayStatics") then return { IsValid = valid, IsGamePaused = function() return paused end } end
     if path:find("WidgetLayoutLibrary") then
-        return { IsValid = valid, GetViewportSize = function() return viewport end,
-            GetViewportScale = function() return viewportScale end }
+        return {
+            IsValid = valid,
+            GetViewportSize = function() return viewport end,
+            GetViewportScale = function() return viewportScale end,
+        }
     end
     if path:find("WidgetBlueprintLibrary") then
-        return { IsValid = valid, Create = function(_, pc)
-            assert(pc == zone.controller)
-            local isBody = creatingBody
-            creatingBody = not creatingBody
-            local titleWidget = isBody and created[#created] or nil
-            local widget = {
-                IsValid = valid, AddToViewport = noop, ForceLayoutPrepass = noop,
-                SetAnchorsInViewport = function(self)
-                    self.anchors = { Minimum = { X = 0, Y = 0 }, Maximum = { X = 0, Y = 0 } }
-                end,
-                SetAlignmentInViewport = function(self, alignment) self.alignment = alignment end,
-                SetPositionInViewport = function(self, position, removeDpi)
-                    self.position, self.removeDpi = position, removeDpi
-                    self.anchors = nil
-                end,
-                SetDesiredSizeInViewport = function(self, size) self.size = size end,
-                SetVisibility = function(self, visibility)
-                    assert(visibility == 4 or visibility == 1)
-                    if visibility == 1 then
-                        self.styleHolder = true
-                        styleHolders[#styleHolders + 1] = self
-                        if not isBody then
-                            assert(created[#created] == self)
-                            table.remove(created)
+        return {
+            IsValid = valid,
+            Create = function(_, pc)
+                assert(pc == zone.controller)
+                local isBody = creatingBody
+                creatingBody = not creatingBody
+                local titleWidget = isBody and created[#created] or nil
+                local widget = {
+                    IsValid = valid,
+                    AddToViewport = noop,
+                    ForceLayoutPrepass = noop,
+                    SetAnchorsInViewport = function(self)
+                        self.anchors = { Minimum = { X = 0, Y = 0 }, Maximum = { X = 0, Y = 0 } }
+                    end,
+                    SetAlignmentInViewport = function(self, alignment) self.alignment = alignment end,
+                    SetPositionInViewport = function(self, position, removeDpi)
+                        self.position, self.removeDpi = position, removeDpi
+                        self.anchors = nil
+                    end,
+                    SetDesiredSizeInViewport = function(self, size) self.size = size end,
+                    SetVisibility = function(self, visibility)
+                        assert(visibility == 4 or visibility == 1)
+                        if visibility == 1 then
+                            self.styleHolder = true
+                            styleHolders[#styleHolders + 1] = self
+                            if not isBody then
+                                assert(created[#created] == self)
+                                table.remove(created)
+                            end
                         end
-                    end
-                end,
-                SetText = function(self, text)
-                    self.partText = text
-                    self.text = text
-                    self.CommonTextObj.value = text
-                    if titleWidget then titleWidget.text = titleWidget.partText .. text end
-                end,
-                RemoveFromParent = function(self)
-                    self.removed = true
-                    if not isBody and not self.styleHolder then removed = removed + 1 end
-                end,
-                CommonTextObj = {
-                    IsValid = valid, SetAutoWrapText = noop,
-                    Font = { Size = 18 },
-                    SetFont = function(self, font) self.Font = font end,
-                    SetJustification = function(self, value) self.justification = value end,
-                    SetColorAndOpacity = function(self, value) self.ColorAndOpacity = value end,
-                    SetShadowOffset = function(self, value) self.ShadowOffset = value end,
-                    SetShadowColorAndOpacity = function(self, value) self.ShadowColorAndOpacity = value end,
-                    GetDesiredSize = function(self) return { X = #(self.value or "") * 10, Y = 24 } end,
-                    GetText = function(self) return { ToString = function() return self.value or "" end } end,
-                },
-            }
-            if isBody then titleWidget.body = widget else created[#created + 1] = widget end
-            return widget
-        end }
+                    end,
+                    SetText = function(self, text)
+                        self.partText = text
+                        self.text = text
+                        self.CommonTextObj.value = text
+                        if titleWidget then titleWidget.text = titleWidget.partText .. text end
+                    end,
+                    RemoveFromParent = function(self)
+                        self.removed = true
+                        if not isBody and not self.styleHolder then removed = removed + 1 end
+                    end,
+                    CommonTextObj = {
+                        IsValid = valid,
+                        SetAutoWrapText = noop,
+                        Font = { Size = 18 },
+                        SetFont = function(self, font) self.Font = font end,
+                        SetJustification = function(self, value) self.justification = value end,
+                        SetColorAndOpacity = function(self, value) self.ColorAndOpacity = value end,
+                        SetShadowOffset = function(self, value) self.ShadowOffset = value end,
+                        SetShadowColorAndOpacity = function(self, value) self.ShadowColorAndOpacity = value end,
+                        GetDesiredSize = function(self) return { X = #(self.value or "") * 10, Y = 24 } end,
+                        GetText = function(self)
+                            return { ToString = function() return self.value or "" end }
+                        end,
+                    },
+                }
+                if isBody then
+                    titleWidget.body = widget
+                else
+                    created[#created + 1] = widget
+                end
+                return widget
+            end,
+        }
     end
     if path:find("^/Game/UI/") then return assets[path] end
     assert(path:find("W_Text"), "Unexpected widget class")
@@ -427,22 +874,36 @@ poll(100)
 assert(#created == 1 and created[1].text == "Artist - First song")
 local layout = created[1]
 assert(layout.position.X == 2326 and layout.position.Y == 900 and layout.removeDpi == false)
-assert(layout.anchors.Minimum.X == 0 and layout.anchors.Minimum.Y == 0
-    and layout.anchors.Maximum.X == 0 and layout.anchors.Maximum.Y == 0)
-assert(layout.alignment.X == 0 and layout.alignment.Y == 0
-    and layout.size.X == 60 and layout.size.Y == 100)
+assert(
+    layout.anchors.Minimum.X == 0
+        and layout.anchors.Minimum.Y == 0
+        and layout.anchors.Maximum.X == 0
+        and layout.anchors.Maximum.Y == 0
+)
+assert(layout.alignment.X == 0 and layout.alignment.Y == 0 and layout.size.X == 60 and layout.size.Y == 100)
 assert(layout.partText == "Artist" and layout.body.partText == " - First song")
-assert(layout.CommonTextObj.Font == speakerStyle.Font and layout.CommonTextObj.ColorAndOpacity == speakerStyle.ColorAndOpacity)
-assert(layout.body.CommonTextObj.Font == bodyStyle.Font and layout.body.CommonTextObj.ColorAndOpacity == bodyStyle.ColorAndOpacity)
-assert(layout.CommonTextObj.Font.FontMaterial == speakerMaterial
-    and layout.body.CommonTextObj.Font.FontMaterial == bodyMaterial
-    and layout.CommonTextObj.Font.OutlineSettings.OutlineMaterial == speakerOutline
-    and layout.body.CommonTextObj.Font.OutlineSettings.OutlineMaterial == bodyOutline
-    and layout.body.CommonTextObj.Font.OutlineSettings.bApplyOutlineToDropShadows
-    and layout.CommonTextObj.Font.TypefaceFontName == "Bold"
-    and layout.CommonTextObj.Font.LetterSpacing == 2, "Subtitle font materials/outline/spacing were lost")
-assert(layout.CommonTextObj.ShadowOffset == speakerStyle.ShadowOffset
-    and layout.body.CommonTextObj.ShadowColorAndOpacity == bodyStyle.ShadowColorAndOpacity)
+assert(
+    layout.CommonTextObj.Font == speakerStyle.Font
+        and layout.CommonTextObj.ColorAndOpacity == speakerStyle.ColorAndOpacity
+)
+assert(
+    layout.body.CommonTextObj.Font == bodyStyle.Font
+        and layout.body.CommonTextObj.ColorAndOpacity == bodyStyle.ColorAndOpacity
+)
+assert(
+    layout.CommonTextObj.Font.FontMaterial == speakerMaterial
+        and layout.body.CommonTextObj.Font.FontMaterial == bodyMaterial
+        and layout.CommonTextObj.Font.OutlineSettings.OutlineMaterial == speakerOutline
+        and layout.body.CommonTextObj.Font.OutlineSettings.OutlineMaterial == bodyOutline
+        and layout.body.CommonTextObj.Font.OutlineSettings.bApplyOutlineToDropShadows
+        and layout.CommonTextObj.Font.TypefaceFontName == "Bold"
+        and layout.CommonTextObj.Font.LetterSpacing == 2,
+    "Subtitle font materials/outline/spacing were lost"
+)
+assert(
+    layout.CommonTextObj.ShadowOffset == speakerStyle.ShadowOffset
+        and layout.body.CommonTextObj.ShadowColorAndOpacity == bodyStyle.ShadowColorAndOpacity
+)
 assert(speakerStyle.Font.Size == 20 and bodyStyle.Font.Size == 20, "Live subtitle style was modified")
 assert(layout.CommonTextObj.justification == 0 and layout.body.CommonTextObj.justification == 0)
 for _, dimensions in ipairs({ { 1920, 1080, 1 }, { 3840, 2160, 2 }, { 800, 600, 1 }, { 400, 300, 2 } }) do
@@ -452,9 +913,13 @@ for _, dimensions in ipairs({ { 1920, 1080, 1 }, { 3840, 2160, 2 }, { 800, 600, 
     assert(math.abs(layout.body.position.X + layout.body.size.X - (w - math.min(64, w / 10))) < 0.001)
     assert(layout.position.X + layout.size.X == layout.body.position.X, "Subtitle segments overlap or gap")
     assert(math.abs(layout.position.Y + layout.size.Y - (h - math.min(80, h / 10))) < 0.001)
-    assert(layout.position.X >= 0 and layout.position.Y >= 0
-        and layout.position.X + layout.size.X <= w and layout.position.Y + layout.size.Y <= h,
-        "Banner extends outside DPI-scaled viewport")
+    assert(
+        layout.position.X >= 0
+            and layout.position.Y >= 0
+            and layout.position.X + layout.size.X <= w
+            and layout.position.Y + layout.size.Y <= h,
+        "Banner extends outside DPI-scaled viewport"
+    )
 end
 assert(#created == 1, "Resize recreated or repeated the banner")
 viewport, viewportScale = { X = 3440, Y = 1440 }, 4 / 3
@@ -464,8 +929,7 @@ assert(#created == 1, "Heartbeat repeated a banner")
 poll(106)
 assert(removed == 1, "Banner did not expire after six seconds")
 assert(layout.removed and layout.body.removed, "Subtitle segments not both removed")
-assert(zone.logs[#zone.logs]:find("banner dismissed: six%-second expiry, age=6s"),
-    "Banner lifetime diagnostic missing")
+assert(zone.logs[#zone.logs]:find("banner dismissed: six%-second expiry, age=6s"), "Banner lifetime diagnostic missing")
 poll(107)
 assert(#created == 1)
 track(108, "Latest song", "Other artist", "iTunes")
@@ -506,8 +970,11 @@ zone:check()
 print("PASS: app-agnostic banners, deduplication, expiry, pause, danger, and world transitions")
 
 for _, bad in ipairs({
-    "", "ZoneXM/2\n100\nsource\ntitle\nartist\n", "ZoneXM/1\n100\nsource\ntitle\n",
-    string.rep("a", 4097), "ZoneXM/1\n100\nsource\ntitle\0\nartist\n",
+    "",
+    "ZoneXM/2\n100\nsource\ntitle\nartist\n",
+    "ZoneXM/1\n100\nsource\ntitle\n",
+    string.rep("a", 4097),
+    "ZoneXM/1\n100\nsource\ntitle\0\nartist\n",
     "ZoneXM/1\n100\nsource\n\255\nartist\n",
 }) do
     snapshot = bad
@@ -516,7 +983,9 @@ end
 snapshot = "bad snapshot"
 poll(121)
 local errorLogged = false
-for _, message in ipairs(zone.logs) do if message:find("banner ERROR") then errorLogged = true end end
+for _, message in ipairs(zone.logs) do
+    if message:find("banner ERROR") then errorLogged = true end
+end
 assert(errorLogged, "Invalid input was not logged")
 track(131, "Recovered song")
 poll(131)
@@ -530,8 +999,15 @@ print("PASS: display truncation preserves Unicode; file access errors are surfac
 
 zone.env.io.open = openSnapshot
 local function notification(now, received, id, title, body, app)
-    notificationSnapshot = string.format("ZoneXM/notification/1\n%d\n%d\nApp.Id\n%s\n%s\n%s\n%s\n",
-        now, received, id, app or "Pandora", title or "Notification", body or "Body")
+    notificationSnapshot = string.format(
+        "ZoneXM/notification/1\n%d\n%d\nApp.Id\n%s\n%s\n%s\n%s\n",
+        now,
+        received,
+        id,
+        app or "Pandora",
+        title or "Notification",
+        body or "Body"
+    )
 end
 track(140, "Media should not win")
 notification(140, 140, "event1", "Song title", "Artist")
@@ -546,25 +1022,36 @@ assert(#created == 8, "Identical text with a new event ID was lost")
 notification(143, 143, "event4", "Latest", "Newest only", "Calendar")
 local beforeReceipt = #zone.logs
 poll(143)
-assert(#created == 9 and created[9].text == "Latest - Newest only", "Notification was suppressed during danger/dialogue")
+assert(
+    #created == 9 and created[9].text == "Latest - Newest only",
+    "Notification was suppressed during danger/dialogue"
+)
 local receiptLogged = false
 for i = beforeReceipt + 1, #zone.logs do
-    assert(not zone.logs[i]:find("Latest") and not zone.logs[i]:find("Newest"), "Diagnostic leaked notification contents")
+    assert(
+        not zone.logs[i]:find("Latest") and not zone.logs[i]:find("Newest"),
+        "Diagnostic leaked notification contents"
+    )
     if zone.logs[i]:find("notification event received by game %(age=0s%)") then receiptLogged = true end
 end
 assert(receiptLogged, "Event receipt diagnostic missing")
 notification(144, 144, "event5", "Paused", "Waiting")
 paused = true
 poll(144)
-assert(#created == 9 and zone.logs[#zone.logs]:find("notification waiting: game paused or no player"),
-    "Paused notification wait was not diagnosed")
+assert(
+    #created == 9 and zone.logs[#zone.logs]:find("notification waiting: game paused or no player"),
+    "Paused notification wait was not diagnosed"
+)
 local waitLogs = #zone.logs
 poll(145)
 assert(#zone.logs == waitLogs, "Waiting diagnostic repeated every poll")
 notification(175, 144, "event5", "Paused", "Waiting")
 poll(175)
-assert(zone.logs[#zone.logs]:find("notification not displayed: event age 31s is outside the 30%-second window")
-    and not zone.logs[#zone.logs]:find("Paused"), "Expired notification was not diagnosed")
+assert(
+    zone.logs[#zone.logs]:find("notification not displayed: event age 31s is outside the 30%-second window")
+        and not zone.logs[#zone.logs]:find("Paused"),
+    "Expired notification was not diagnosed"
+)
 paused = false
 notification(180, 143, "event4", "Latest", "Newest only", "Calendar")
 track(180, "Suppressed by live idle companion")
@@ -586,11 +1073,14 @@ assert(#created == 11)
 local removedBeforeFallback = removed
 notificationSnapshot = nil
 poll(193)
-assert(#created == 11 and removed == removedBeforeFallback + 1,
-    "Returning to an already-shown media track left the notification widget visible")
+assert(
+    #created == 11 and removed == removedBeforeFallback + 1,
+    "Returning to an already-shown media track left the notification widget visible"
+)
 assert(zone.exports.bannerText({ title = "Title only", artist = "", notification = true }) == "Title only")
 assert(zone.exports.bannerText({ title = "Title", artist = "Body", notification = true }) == "Title - Body")
-notificationSnapshot = "ZoneXM/notification/1\n193\n193\nPandoraMediaInc.29680B314EFC2_n619g4d5j0fnw!App\npandora-test\nPandora\nRock With Me\nRebelution\n"
+notificationSnapshot =
+    "ZoneXM/notification/1\n193\n193\nPandoraMediaInc.29680B314EFC2_n619g4d5j0fnw!App\npandora-test\nPandora\nRock With Me\nRebelution\n"
 local pandoraTrack = zone.exports.readNotification(193)
 assert(zone.exports.bannerText(pandoraTrack) == "Rebelution - Rock With Me")
 local unchangedKey = pandoraTrack.key
@@ -602,8 +1092,10 @@ notificationSnapshot = nil
 track(194, "Invalid viewport test")
 viewportScale = 0
 poll(194)
-assert(zone.logs[#zone.logs - 1]:find("invalid banner viewport") or zone.logs[#zone.logs]:find("invalid banner viewport"),
-    "Invalid viewport was not surfaced")
+assert(
+    zone.logs[#zone.logs - 1]:find("invalid banner viewport") or zone.logs[#zone.logs]:find("invalid banner viewport"),
+    "Invalid viewport was not surfaced"
+)
 viewportScale = 4 / 3
 track(204, "Viewport recovered")
 poll(204)
@@ -615,33 +1107,47 @@ track(211, "Missing style")
 local beforeMissingStyle = #created
 poll(211)
 assert(#created == beforeMissingStyle + 1, "Transient subtitle removal blocked the banner")
-assert(created[#created].CommonTextObj.Font == speakerStyle.Font
-    and created[#created].CommonTextObj.ShadowOffset == speakerStyle.ShadowOffset
-    and created[#created].body.CommonTextObj.Font == bodyStyle.Font,
-    "Retained style lost original font/material/shadow data")
+assert(
+    created[#created].CommonTextObj.Font == speakerStyle.Font
+        and created[#created].CommonTextObj.ShadowOffset == speakerStyle.ShadowOffset
+        and created[#created].body.CommonTextObj.Font == bodyStyle.Font,
+    "Retained style lost original font/material/shadow data"
+)
 subtitleView = savedSubtitles
 local largeFont = asset("Font", "/Game/UI/Fonts/SubtitleLarge.SubtitleLarge")
 for _, style in ipairs({ speakerStyle, bodyStyle }) do
     local font = {}
-    for key, value in pairs(style.Font) do font[key] = value end
+    for key, value in pairs(style.Font) do
+        font[key] = value
+    end
     font.Size, font.FontObject = 26, largeFont
     style.Font = font
 end
 track(221, "New subtitle setting", "Band")
 poll(221)
 local styled = created[#created]
-assert(styled.CommonTextObj.Font.Size == 26 and styled.body.CommonTextObj.Font.Size == 26,
-    "New banner did not pick up current subtitle font size")
-assert(styled.CommonTextObj.ColorAndOpacity == speakerStyle.ColorAndOpacity
-    and styled.body.CommonTextObj.ColorAndOpacity == bodyStyle.ColorAndOpacity)
+assert(
+    styled.CommonTextObj.Font.Size == 26 and styled.body.CommonTextObj.Font.Size == 26,
+    "New banner did not pick up current subtitle font size"
+)
+assert(
+    styled.CommonTextObj.ColorAndOpacity == speakerStyle.ColorAndOpacity
+        and styled.body.CommonTextObj.ColorAndOpacity == bodyStyle.ColorAndOpacity
+)
 poll(227)
 assert(styled.removed and styled.body.removed)
-assert(styleSnapshot and styleSnapshot:find("/Game/UI/Fonts/SubtitleLarge.SubtitleLarge|", 1, true)
-    and styleSnapshot:find("|26|", 1, true), "Changed subtitle style was not persisted")
+assert(
+    styleSnapshot
+        and styleSnapshot:find("/Game/UI/Fonts/SubtitleLarge.SubtitleLarge|", 1, true)
+        and styleSnapshot:find("|26|", 1, true),
+    "Changed subtitle style was not persisted"
+)
 for _, text in ipairs({ "New subtitle setting", "Band", "Missing style", "Latest", "Rebelution" }) do
     assert(not styleSnapshot:find(text, 1, true), "Saved style leaked banner text")
 end
-print("PASS: subtitle font/size, separate speaker/body colors, read-only style copying, missing-style diagnostics and recovery")
+print(
+    "PASS: subtitle font/size, separate speaker/body colors, read-only style copying, missing-style diagnostics and recovery"
+)
 subtitleView = { IsValid = function() return false end }
 savedSubtitles.GetFullName = function() return "SubtitleView live" end
 subtitleCandidates = { savedSubtitles }
@@ -650,17 +1156,32 @@ poll(230)
 assert(created[#created].text == "Second live subtitle view", "Invalid first subtitle view hid a live candidate")
 subtitleCandidates = {}
 subtitleView = nil
-for _, holder in ipairs(styleHolders) do holder.IsValid = function() return false end end
+for _, holder in ipairs(styleHolders) do
+    holder.IsValid = function() return false end
+end
 local function assertSavedStyle(widget, message)
     local font, bodyFont = widget.CommonTextObj.Font, widget.body.CommonTextObj.Font
-    assert(font ~= speakerStyle.Font and font.FontObject == largeFont and font.Size == 26
-        and font.FontMaterial == speakerMaterial and font.OutlineSettings.OutlineMaterial == speakerOutline
-        and font.OutlineSettings.bApplyOutlineToDropShadows and font.TypefaceFontName == "Bold"
-        and font.LetterSpacing == 2 and bodyFont.FontMaterial == bodyMaterial, message)
+    assert(
+        font ~= speakerStyle.Font
+            and font.FontObject == largeFont
+            and font.Size == 26
+            and font.FontMaterial == speakerMaterial
+            and font.OutlineSettings.OutlineMaterial == speakerOutline
+            and font.OutlineSettings.bApplyOutlineToDropShadows
+            and font.TypefaceFontName == "Bold"
+            and font.LetterSpacing == 2
+            and bodyFont.FontMaterial == bodyMaterial,
+        message
+    )
     local color = widget.CommonTextObj.ColorAndOpacity.SpecifiedColor
-    assert(color.R == 1 and color.G == 0.55 and color.B == 0
-        and widget.body.CommonTextObj.ColorAndOpacity.SpecifiedColor.G == 1
-        and widget.CommonTextObj.ShadowOffset.X == 1, message)
+    assert(
+        color.R == 1
+            and color.G == 0.55
+            and color.B == 0
+            and widget.body.CommonTextObj.ColorAndOpacity.SpecifiedColor.G == 1
+            and widget.CommonTextObj.ShadowOffset.X == 1,
+        message
+    )
 end
 track(237, "Collected cache")
 local beforeCollected = #created
@@ -672,7 +1193,10 @@ subtitleView = savedSubtitles
 track(247, "Cache rebuilt")
 poll(247)
 assert(created[#created].text == "Cache rebuilt", "Style cache failed to rebuild")
-assert(created[#created].CommonTextObj.Font == speakerStyle.Font, "Live subtitles did not take priority over saved style")
+assert(
+    created[#created].CommonTextObj.Font == speakerStyle.Font,
+    "Live subtitles did not take priority over saved style"
+)
 local lastHolder = styleHolders[#styleHolders]
 subtitleView = nil
 zone.controller.GetAddress = function() return 987 end
@@ -685,24 +1209,33 @@ subtitleView = savedSubtitles
 track(264, "New world styled")
 poll(264)
 assert(created[#created].text == "New world styled")
-print("PASS: retained styles survive missing SubtitleView; invalid-first lookup, GC, and player transitions recover safely")
+print(
+    "PASS: retained styles survive missing SubtitleView; invalid-first lookup, GC, and player transitions recover safely"
+)
 subtitleView = nil
 zone.controller.GetAddress = function() return 989 end
 local goodStyle = styleSnapshot
 assets["/Game/UI/Materials/MI_Speaker.MI_Speaker"] = nil
 track(266, "Optional material unloaded")
 poll(266)
-assert(created[#created].text == "Optional material unloaded"
-    and created[#created].CommonTextObj.Font.FontObject == largeFont
-    and created[#created].CommonTextObj.Font.FontMaterial == nil, "Missing optional material blocked saved style")
+assert(
+    created[#created].text == "Optional material unloaded"
+        and created[#created].CommonTextObj.Font.FontObject == largeFont
+        and created[#created].CommonTextObj.Font.FontMaterial == nil,
+    "Missing optional material blocked saved style"
+)
 assets["/Game/UI/Materials/MI_Speaker.MI_Speaker"] = speakerMaterial
 local function assertFallback(now, text, reason)
     track(now, text)
     poll(now)
     local widget = created[#created]
     assert(widget.text == text, "Fallback did not display the banner: " .. reason)
-    assert(widget.CommonTextObj.Font.Size == 18 and widget.CommonTextObj.ColorAndOpacity.SpecifiedColor.B == 0.1
-        and widget.body.CommonTextObj.ColorAndOpacity.SpecifiedColor.B == 1, "Fallback colors wrong: " .. reason)
+    assert(
+        widget.CommonTextObj.Font.Size == 18
+            and widget.CommonTextObj.ColorAndOpacity.SpecifiedColor.B == 0.1
+            and widget.body.CommonTextObj.ColorAndOpacity.SpecifiedColor.B == 1,
+        "Fallback colors wrong: " .. reason
+    )
     local logged = false
     for i = #zone.logs - 2, #zone.logs do
         if zone.logs[i] and zone.logs[i]:find(reason, 1, true) then logged = true end
@@ -722,12 +1255,16 @@ zone.env.LoadAsset = function(path)
 end
 track(274, "Font loaded on demand")
 poll(274)
-assert(created[#created].text == "Font loaded on demand"
-    and created[#created].CommonTextObj.Font.FontObject == largeFont, "Unloaded saved font was not loaded")
+assert(
+    created[#created].text == "Font loaded on demand" and created[#created].CommonTextObj.Font.FontObject == largeFont,
+    "Unloaded saved font was not loaded"
+)
 zone.env.LoadAsset = nil
 assets["/Game/UI/Fonts/SubtitleLarge.SubtitleLarge"] = largeFont
 subtitleView = savedSubtitles
-print("PASS: saved subtitle style covers fresh loads; optional materials degrade; cold/corrupt/missing-font fall back visibly")
+print(
+    "PASS: saved subtitle style covers fresh loads; optional materials degrade; cold/corrupt/missing-font fall back visibly"
+)
 snapshot = nil
 zone.controller.GetAddress = function() return 988 end
 poll(280)
@@ -741,7 +1278,84 @@ poll(282)
 assert(#styleHolders == idleHolders, "Danger invalidated retained subtitle styles")
 track(283, "First event after dialogue disappeared", "Artist")
 poll(283)
-assert(created[#created].text == "Artist - First event after dialogue disappeared",
-    "Banner could not use styles captured before the first notification")
+assert(
+    created[#created].text == "Artist - First event after dialogue disappeared",
+    "Banner could not use styles captured before the first notification"
+)
 assert(created[#created].CommonTextObj.Font == speakerStyle.Font, "Retained live style lost priority")
 print("PASS: idle style capture survives dialogue ending and combat deferral without widget churn")
+
+zone.env.io.open = function()
+    return {
+        close = function() return nil, "close failed" end,
+        read = function() return "ZoneXM/1\n300\nPlayer\nTitle\nArtist\n" end,
+    }
+end
+assert(not pcall(zone.exports.readTrack, 300), "Snapshot close failure was hidden")
+zone.env.io.open = openSnapshot
+
+local alertAttempts, alertRemovals, alertTime, isTalking = 0, 0, 300, true
+local sensorState = loadMod("ZoneXM", "", function(state)
+    state.env.os = setmetatable({
+        getenv = function() return "C:\\ZoneXM Sensor Test" end,
+        remove = function()
+            alertRemovals = alertRemovals + 1
+            return true
+        end,
+        time = function() return alertTime end,
+    }, { __index = os })
+    state.env.io.open = function(path, mode)
+        if mode == "rb" then return nil, "not found", 2 end
+
+        assert(path == "C:\\ZoneXM Sensor Test\\ZoneXM\\alert.flag" and mode == "w")
+        alertAttempts = alertAttempts + 1
+
+        if alertAttempts <= 2 then return nil, "directory missing", 2 end
+
+        return {
+            close = function()
+                if alertAttempts == 3 then return nil, "close failed" end
+                return true
+            end,
+            write = function(self, timestamp)
+                assert(timestamp == tostring(alertTime))
+                return self
+            end,
+        }
+    end
+end)
+sensorState.controller = {
+    GetAddress = function() return 1 end,
+    IsInStaticDialog = function() return isTalking end,
+    IsValid = valid,
+    Pawn = { IsValid = valid },
+}
+local sensorPoll = sensorState.timers[2].callback
+
+for _ = 1, 4 do
+    sensorState:run(sensorPoll)
+end
+
+assert(alertAttempts == 4, "Failed alert writes/close were incorrectly counted as a heartbeat")
+sensorState:run(sensorPoll)
+assert(alertAttempts == 4, "Successful alert write did not respect heartbeat cadence")
+alertTime = 303
+sensorState:run(sensorPoll)
+assert(alertAttempts == 5, "Alert heartbeat did not refresh after three seconds")
+isTalking, alertTime = false, 306
+sensorState:run(sensorPoll)
+assert(alertRemovals == 1, "Alert was not cleared after the speech holdoff")
+assert(sensorState.violations == 0, "Extracted sensors accessed Unreal objects outside the game thread")
+
+local writeErrors = 0
+
+for _, message in ipairs(sensorState.logs) do
+    if message:find("alert flag write ERROR", 1, true) then writeErrors = writeErrors + 1 end
+end
+
+assert(writeErrors == 2, "Repeated write errors were not deduplicated or close failures were not reported")
+sensorState.controller = nil
+local sensorLogCount = #sensorState.logs
+sensorState:run(sensorState.timers[1].callback)
+assert(#sensorState.logs == sensorLogCount and sensorState.violations == 0, "Absent player was treated as a radar error")
+print("PASS: module isolation, snapshot close errors, failed flag-write retries, heartbeat cadence and clearing")

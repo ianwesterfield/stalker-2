@@ -1,8 +1,7 @@
-# Headless check: does out/SK_MolotovBottle.fbx actually contain the hijacked
-# flame normals and the rag vertex colors? Round-trips through Blender's FBX
+# Headless check: does out/SK_MolotovBottle.fbx carry exactly the bottle + rag
+# material slots and the rag vertex colors? Round-trips through Blender's FBX
 # importer and reports.
 import os
-import sys
 
 import bpy
 from mathutils import Vector
@@ -32,25 +31,11 @@ if me.color_attributes:
 else:
     print("CHECK NO COLOR ATTRIBUTES — FBX lost them")
 
-# flame custom normals: loops of polys using the flame material
-for tag in ("RagFlame", "SheathFlame"):
-    flame_idx = next(
-        (i for i, m in enumerate(me.materials) if m and tag in m.name), None
-    )
-    print(f"CHECK {tag} material index: {flame_idx}")
-    if flame_idx is not None:
-        zs = []
-        for p in me.polygons:
-            if p.material_index == flame_idx:
-                for li in p.loop_indices:
-                    zs.append(me.loops[li].normal.z)
-        if zs:
-            print(
-                f"CHECK {tag} loop normals: n={len(zs)} min_z={min(zs):.3f} max_z={max(zs):.3f}"
-            )
-        else:
-            print(f"CHECK no {tag} polys found")
-# static twin: helpers stripped, flame normals intact after the edit-mode delete
+SLOTS = ["MI_cns_cossacks_vodka_01_glass", "MI_cns_cossacks_vodka_01_02", "MI_molotov_rag"]
+slot_names = [m.name.split(".")[0] if m else None for m in me.materials]
+assert slot_names == SLOTS, f"unexpected material slots {slot_names}"
+
+# static twin: helpers stripped, same slots
 bpy.ops.import_scene.fbx(filepath=os.path.join(OUT_DIR, "SM_MolotovBottle.fbx"))
 sm = next(o for o in bpy.data.objects if o.type == "MESH" and o.name.startswith("SM_"))
 sme = sm.data
@@ -60,14 +45,6 @@ print(f"CHECK SM verts={len(sme.vertices)} polys={len(sme.polygons)}")
 helper_verts = len(me.vertices) - len(sme.vertices)
 print(f"CHECK helper verts stripped: {helper_verts}")
 assert helper_verts > 0 and helper_verts % 3 == 0, "phys helpers leaked into SM twin"
-for tag in ("RagFlame", "SheathFlame"):
-    fi = next((i for i, m in enumerate(sme.materials) if m and tag in m.name), None)
-    zs = [
-        sme.loops[li].normal.z
-        for p in sme.polygons
-        if p.material_index == fi
-        for li in p.loop_indices
-    ]
-    print(f"CHECK SM {tag} loop normals: n={len(zs)} min_z={min(zs):.3f}")
-    assert min(zs) > 0.99, f"SM {tag} custom normals lost in helper strip"
+sm_slots = [m.name.split(".")[0] if m else None for m in sme.materials]
+assert sm_slots == SLOTS, f"unexpected SM material slots {sm_slots}"
 print("CHECK_DONE")

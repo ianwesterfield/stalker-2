@@ -1,5 +1,5 @@
-# Reassign/repair SK_MolotovBottle material slots after a scripted reimport.
-# Appends the M_RagFlame slot if the import dropped it. Run:  py "<this file>"
+# Reassign SK_MolotovBottle material slots after a scripted reimport and drop
+# trailing slots no section uses. Run:  py "<this file>"
 import unreal
 
 PLUGIN = "/MolotovBottle"
@@ -8,8 +8,6 @@ ASSIGN = {
     "MI_cns_cossacks_vodka_01_glass": f"{GAME_MATS}/MI_cns_cossacks_vodka_01_glass",
     "MI_cns_cossacks_vodka_01_02": f"{GAME_MATS}/MI_cns_cossacks_vodka_01_02",
     "MI_molotov_rag": f"{PLUGIN}/M_MolotovRag",
-    "M_RagFlame": f"{PLUGIN}/M_RagFlame",
-    "M_SheathFlame": f"{PLUGIN}/M_SheathFlame",
 }
 
 sk = unreal.EditorAssetLibrary.load_asset(f"{PLUGIN}/SK_MolotovBottle")
@@ -33,14 +31,15 @@ for i, sm in enumerate(mats):
     else:
         unreal.log(f"slot {i} '{slot}' OK")
 
-for slot, want in ASSIGN.items():
-    if slot not in seen:
-        m = unreal.EditorAssetLibrary.load_asset(want)
-        assert m, f"{want} missing"
-        mats.append(
-            unreal.SkeletalMaterial(material_interface=m, material_slot_name=slot)
-        )
-        unreal.log(f"APPENDED slot {len(mats)-1} '{slot}' -> {want}")
+missing = set(ASSIGN) - seen
+assert not missing, f"import dropped slots {sorted(missing)}"
+
+# reimport can keep slots the FBX no longer has; they trail the live ones
+while mats and str(mats[-1].get_editor_property("material_slot_name")) not in ASSIGN:
+    unreal.log(f"DROPPED stale slot '{mats[-1].get_editor_property('material_slot_name')}'")
+    mats.pop()
+
+assert len(mats) == len(ASSIGN), f"unexpected slots {[str(m.get_editor_property('material_slot_name')) for m in mats]}"
 
 sk.set_editor_property("materials", mats)
 # set_editor_property only dirties the package — must save or cook sees stale slots

@@ -1,0 +1,100 @@
+{
+  "name": "ZoneXM",
+  "version": "2.1",
+  "intent": "Industrial Zone aesthetics, not an exact S.T.A.L.K.E.R. UI or copyrighted font recreation",
+  "reference": "references/brand_icon_master_512.png",
+  "palette": {
+    "canvas": "#141715",
+    "surface": "#202421",
+    "surfaceRaised": "#282C29",
+    "panelBorder": "#585348",
+    "textPrimary": "#F0ECE3",
+    "textSecondary": "#BEC0B8",
+    "textMuted": "#A5A9A0",
+    "hazardYellow": "#E6AD38",
+    "hazardYellowHover": "#F2C15A",
+    "amberDark": "#A56A1D",
+    "rust": "#8B4C28",
+    "olive": "#4B5142",
+    "focus": "#FFD16C",
+    "signalCyan": "#72BDD1",
+    "success": "#A8BA80",
+    "danger": "#DE8B72"
+  },
+  "fontFamilies": {
+    "display": "Barlow Condensed",
+    "body": "IBM Plex Sans",
+    "technical": "IBM Plex Mono"
+  },
+  "fontSources": {
+    "display": "https://fonts.google.com/specimen/Barlow+Condensed",
+    "body_and_technical": "https://github.com/IBM/plex"
+  },
+  "typeScale": {
+    "h1": {
+      "font": "display",
+      "sizePx": 27,
+      "weight": 700,
+      "letterSpacingEm": 0.045
+    },
+    "h2": {
+      "font": "display",
+      "sizePx": 21,
+      "weight": 700,
+      "letterSpacingEm": 0.045
+    },
+    "tab": {
+      "font": "display",
+      "sizePx": 17,
+      "weight": 600,
+      "letterSpacingEm": 0.025
+    },
+    "body": {
+      "font": "body",
+      "sizePx": 14,
+      "weight": 400,
+      "lineHeight": 1.42
+    },
+    "label": {
+      "font": "body",
+      "sizePx": 13,
+      "weight": 500,
+      "lineHeight": 1.35
+    },
+    "status": {
+      "font": "technical",
+      "sizePx": 12,
+      "weight": 500,
+      "lineHeight": 1.38
+    },
+    "caption": {
+      "font": "body",
+      "sizePx": 12,
+      "weight": 400,
+      "lineHeight": 1.35
+    }
+  },
+  "radiiPx": {
+    "card": 8,
+    "control": 5
+  },
+  "spacingBasePx": 4,
+  "effects": {
+    "mainBackgroundOpacity": 0.22,
+    "mainBackgroundOpacityAllowed": [
+      0.17,
+      0.27
+    ],
+    "grainOpacityForPanels": 0.08,
+    "corrosionOpacityDecorative": 0.14,
+    "panelBackgroundAlpha": 0.94,
+    "focusRingWidthPx": 2
+  },
+  "textureFiles": {
+    "grain": "textures/fine_grain_overlay_512.png",
+    "rust": "textures/rust_patina_overlay_512.png",
+    "metal": "textures/dark_oxidized_metal_tile_512.png",
+    "hazardPaint": "textures/chipped_hazard_paint_tile_512.png",
+    "wear": "textures/paint_wear_overlay_512.png"
+  }
+}

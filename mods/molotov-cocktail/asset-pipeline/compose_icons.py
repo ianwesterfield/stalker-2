@@ -1,11 +1,8 @@
-"""Build the two inventory icons from rendered + vanilla artwork.
+"""Build the molotov inventory icon from the Blender render.
 
   python compose_icons.py
 
-Molotov: the Blender render, canted right to match the vanilla bottle's lean.
-Kit:     the vanilla vodka icon with the vanilla bandage laid across it like a
-         plus sign - both straight from the game's own textures, only rotated
-         and scaled, so the kit reads as "bottle + bandage".
+The render is canted right to match the vanilla bottle's lean.
 """
 
 import os
@@ -14,13 +11,9 @@ from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
-VANILLA = os.path.join(OUT, "vanilla")
 
 MOLOTOV_RAW = os.path.join(OUT, "T_MolotovIcon_raw.png")
 MOLOTOV_OUT = os.path.join(OUT, "T_MolotovIcon.png")
-KIT_OUT = os.path.join(OUT, "T_MolotovKitIcon.png")
-VODKA = os.path.join(VANILLA, "T_cns_cossacks_vodka_01.png")
-BANDAGE = os.path.join(VANILLA, "T_cns_bandage_01.png")
 
 CANT = -10  # degrees; vanilla bottle icons lean right
 SIZE = 512
@@ -59,23 +52,5 @@ def build_molotov():
     print(f"COMPOSED {MOLOTOV_OUT} {canvas.size}")
 
 
-def build_kit():
-    bottle = trim(Image.open(VODKA).convert("RGBA"))
-    bandage = trim(Image.open(BANDAGE).convert("RGBA"))
-
-    canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
-
-    # bottle upright and left of centre, leaving room for the cross-piece
-    place(canvas, fit(bottle, int(SIZE * 0.46), int(SIZE * 0.84)), 0.36, 0.48)
-
-    # bandage laid across the bottle's lower half to read as "bottle + bandage"
-    r = trim(bandage.rotate(-35, resample=Image.BICUBIC, expand=True))
-    place(canvas, fit(r, int(SIZE * 0.46), int(SIZE * 0.46)), 0.63, 0.66)
-
-    canvas.save(KIT_OUT)
-    print(f"COMPOSED {KIT_OUT} {canvas.size}")
-
-
 build_molotov()
-build_kit()
 print("COMPOSE_DONE")

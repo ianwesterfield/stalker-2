@@ -2,43 +2,61 @@
 -- Drive stack proven (P-1..P-7). Keys:
 --   F2 = record own movement to trace (toggle)  ·  F3 = spawn + protect puppet
 --   F4 = cycle drive: OFF -> ESCORT (10m stations) -> GHOST (replay trace) -> OFF
---   F9 = object dump
+--   Ctrl+J = object dump (UE4SS built-in Keybinds; F9 belongs to Mod Configuration Menu)
 
 local function log(msg) print("[ZoneLink] " .. msg .. "\n") end
 log("probe build loaded")
 
 local UEHelpers = require("UEHelpers")
 
-local PUPPET_SID = "GeneralNPC_Neutral_Stormtrooper"   -- generic neutral A-Life stalker (P-6)
+local PUPPET_SID = "GeneralNPC_Neutral_Stormtrooper" -- generic neutral A-Life stalker (P-6)
 local NPC_SHORT_CLASS = "BP_AI_Human_C"
 
 local probe = {
-    puppet = nil,      -- last spawned actor
-    uid = nil,         -- int UID via CppMediator:GetGUID
+    puppet = nil, -- last spawned actor
+    uid = nil, -- int UID via CppMediator:GetGUID
 }
 
 -- Direct-drive state. Tick source: HUD stat panel widget Tick — WeatherController's
 -- ReceiveTick exists in reflection but never fires (session 5); widget ticks while HUD is up.
 local TICK_HOOK = "/Game/GameLite/FPS_Game/UIRemaster/HUD/StatPanel/W_UpdatedStatPanel.W_UpdatedStatPanel_C:Tick"
-local drive = { mode = "off", hooked = false, alive = false, tick = 0,
-    lastX = nil, lastY = nil, cmdSpeed = 0, kinematic = false, dt = 1 / 60,
-    anim = nil, animLogged = false,
-    walkAsset = nil, montage = nil, slotIdx = 1,
-    station = nil, stationTimer = 0, stationSpan = 0,
-    trace = nil, ghostT = 0, ghostIdx = 1 }
+local drive = {
+    mode = "off",
+    hooked = false,
+    alive = false,
+    tick = 0,
+    lastX = nil,
+    lastY = nil,
+    cmdSpeed = 0,
+    kinematic = false,
+    dt = 1 / 60,
+    anim = nil,
+    animLogged = false,
+    walkAsset = nil,
+    montage = nil,
+    slotIdx = 1,
+    station = nil,
+    stationTimer = 0,
+    stationSpan = 0,
+    trace = nil,
+    ghostT = 0,
+    ghostIdx = 1,
+}
 
 -- Escort stations relative to the player's view yaw; ~10m out on diagonals
 local STATIONS = {
-    { name = "ahead-left",   f = 700,  r = -700 },
-    { name = "ahead-right",  f = 700,  r = 700 },
-    { name = "behind-left",  f = -700, r = -700 },
+    { name = "ahead-left", f = 700, r = -700 },
+    { name = "ahead-right", f = 700, r = 700 },
+    { name = "behind-left", f = -700, r = -700 },
     { name = "behind-right", f = -700, r = 700 },
 }
 
 local function pickStation()
     local cur = drive.station
     local nxt
-    repeat nxt = STATIONS[math.random(#STATIONS)] until nxt ~= cur
+    repeat
+        nxt = STATIONS[math.random(#STATIONS)]
+    until nxt ~= cur
     drive.station = nxt
     drive.stationTimer = 0
     drive.stationSpan = 6 + math.random() * 6
@@ -52,7 +70,10 @@ local rec = { active = false, samples = {}, acc = 0, t = 0 }
 
 local function saveTrace()
     local f, err = io.open(TRACE_PATH, "w")
-    if not f then log("trace save FAILED: " .. tostring(err)) return end
+    if not f then
+        log("trace save FAILED: " .. tostring(err))
+        return
+    end
     f:write("ZLT1\n")
     for _, s in ipairs(rec.samples) do
         f:write(("%.3f %.1f %.1f %.1f %.1f %.1f\n"):format(s.t, s.x, s.y, s.z, s.yaw, s.speed))
@@ -64,13 +85,22 @@ end
 local function loadTrace()
     local f = io.open(TRACE_PATH, "r")
     if not f then return nil end
-    if f:read("*l") ~= "ZLT1" then f:close() return nil end
+    if f:read("*l") ~= "ZLT1" then
+        f:close()
+        return nil
+    end
     local t = {}
     for line in f:lines() do
         local a, b, c, d, e, g = line:match("^([%-%d%.]+) ([%-%d%.]+) ([%-%d%.]+) ([%-%d%.]+) ([%-%d%.]+) ([%-%d%.]+)$")
         if a then
-            t[#t + 1] = { t = tonumber(a), x = tonumber(b), y = tonumber(c), z = tonumber(d),
-                yaw = tonumber(e), speed = tonumber(g) }
+            t[#t + 1] = {
+                t = tonumber(a),
+                x = tonumber(b),
+                y = tonumber(c),
+                z = tonumber(d),
+                yaw = tonumber(e),
+                speed = tonumber(g),
+            }
         end
     end
     f:close()
@@ -85,7 +115,8 @@ end
 
 -- Model stomps StateData every anim update (session 10: gait=ok, anim ignores) — so bypass
 -- the gait machine: loop the walk cycle as a dynamic montage through a slot node.
-local WALK_ANIM = "/Game/_STALKER2/Animations/Characters/AnimSequences/ar/combat/locomotion/base/stand/AS_tp_ar_combat_walk_fwd.AS_tp_ar_combat_walk_fwd"
+local WALK_ANIM =
+    "/Game/_STALKER2/Animations/Characters/AnimSequences/ar/combat/locomotion/base/stand/AS_tp_ar_combat_walk_fwd.AS_tp_ar_combat_walk_fwd"
 local WALK_AUTHORED_SPEED = 180 -- cm/s guess; play rate = cmd/authored, tune by eye
 local SLOT_NAMES = { "DefaultSlot", "FullBody", "UpperBody" }
 
@@ -98,22 +129,37 @@ local function ensureMontage(anim, speed)
             return
         end
         if not drive.walkAsset then
-            local ok, asset = pcall(function()
-                return StaticFindObject(WALK_ANIM) or LoadAsset(WALK_ANIM)
-            end)
+            local ok, asset = pcall(
+                function()
+                    return StaticFindObject(WALK_ANIM) or LoadAsset(WALK_ANIM)
+                end
+            )
             if ok and asset and asset:IsValid() then
                 drive.walkAsset = asset
             else
-                if not drive.assetWarned then drive.assetWarned = true log("montage: walk asset load FAILED") end
+                if not drive.assetWarned then
+                    drive.assetWarned = true
+                    log("montage: walk asset load FAILED")
+                end
                 return
             end
         end
         local slot = SLOT_NAMES[drive.slotIdx]
         if not slot then return end -- all slots exhausted
-        local okM, m = pcall(function()
-            return anim:PlaySlotAnimationAsDynamicMontage(
-                drive.walkAsset, FName(slot), 0.25, 0.25, 1.0, 9999, -1.0, 0.0)
-        end)
+        local okM, m = pcall(
+            function()
+                return anim:PlaySlotAnimationAsDynamicMontage(
+                    drive.walkAsset,
+                    FName(slot),
+                    0.25,
+                    0.25,
+                    1.0,
+                    9999,
+                    -1.0,
+                    0.0
+                )
+            end
+        )
         if okM and m and m:IsValid() then
             drive.montage = m
             log("montage: walk loop STARTED on slot '" .. slot .. "'")
@@ -156,7 +202,10 @@ end
 -- Arm it; if the actor still doesn't translate, onTick flips to manual integration.
 local function armCMC(a)
     local cmc = a.CharacterMovement
-    if not (cmc and cmc:IsValid()) then log("arm: no CharacterMovement") return end
+    if not (cmc and cmc:IsValid()) then
+        log("arm: no CharacterMovement")
+        return
+    end
     local okN, cn = pcall(function() return cmc:GetFullName() end)
     log("arm: CMC = " .. (okN and cn or "<name?>"))
     local okT, te = pcall(function() return cmc:IsComponentTickEnabled() end)
@@ -226,9 +275,11 @@ RegisterKeyBind(Key.F3, function()
         local z = p.Z + 50
         local before = fullNameSet()
         -- bDestroyOnOffline=false: puppet must survive A-Life offline sweeps (P-3)
-        local ok, err = pcall(function()
-            rk:XSpawnObjBySID(PUPPET_SID, 0, false, x, y, z, 0, 0, 0)
-        end)
+        local ok, err = pcall(
+            function()
+                rk:XSpawnObjBySID(PUPPET_SID, 0, false, x, y, z, 0, 0, 0)
+            end
+        )
         log("F3: XSpawnObjBySID -> " .. (ok and "called" or tostring(err)))
         if not ok then return end
         ExecuteWithDelay(700, function()
@@ -238,12 +289,18 @@ RegisterKeyBind(Key.F3, function()
                 if all then
                     for _, a in ipairs(all) do
                         local ok, fn = pcall(function() return a:GetFullName() end)
-                        if ok and not before[fn] then fresh = a break end
+                        if ok and not before[fn] then
+                            fresh = a
+                            break
+                        end
                     end
                 end
                 if not fresh then
-                    log("F3: called OK but no new " .. NPC_SHORT_CLASS ..
-                        " after 700ms. Try Rank=1, or check XShowSpawnDebugInfo via CCM")
+                    log(
+                        "F3: called OK but no new "
+                            .. NPC_SHORT_CLASS
+                            .. " after 700ms. Try Rank=1, or check XShowSpawnDebugInfo via CCM"
+                    )
                     return
                 end
                 probe.puppet = fresh
@@ -255,16 +312,19 @@ RegisterKeyBind(Key.F3, function()
                     local pc = UEHelpers.GetPlayerController()
                     if pc and pc:IsValid() and pc.Pawn and pc.Pawn:IsValid() then
                         local p = pc.Pawn:K2_GetActorLocation()
-                        local d = math.sqrt((loc.X - p.X)^2 + (loc.Y - p.Y)^2 + (loc.Z - p.Z)^2)
+                        local d = math.sqrt((loc.X - p.X) ^ 2 + (loc.Y - p.Y) ^ 2 + (loc.Z - p.Z) ^ 2)
                         log(("F3: spawned %.1fm from player"):format(d / 100))
                     end
                 end
                 log("F3: UID = " .. tostring(probe.uid))
                 if probe.uid then
                     local build = liveInstance("CustomConsoleManagerBuild")
-                    local ok = build and pcall(function()
-                        build:XSetEntityUnkillableByUID(probe.uid, true)
-                    end)
+                    local ok = build
+                        and pcall(
+                            function()
+                                build:XSetEntityUnkillableByUID(probe.uid, true)
+                            end
+                        )
                     log("F3: protect XSetEntityUnkillableByUID -> " .. (ok and "called" or "FAILED"))
                 end
                 log("F3: F4 toggles direct-drive follow (leave his AI alone - unmanaged = parked)")
@@ -286,7 +346,9 @@ local function ghostTick(a, cmc)
         return
     end
     local i = drive.ghostIdx
-    while i < n - 1 and tr[i + 1].t <= drive.ghostT do i = i + 1 end
+    while i < n - 1 and tr[i + 1].t <= drive.ghostT do
+        i = i + 1
+    end
     drive.ghostIdx = i
     local s1, s2 = tr[i], tr[i + 1]
     local span = s2.t - s1.t
@@ -322,8 +384,7 @@ local function onFrame()
                     local v = pc.Pawn.CharacterMovement.Velocity
                     sp = math.sqrt(v.X * v.X + v.Y * v.Y)
                 end)
-                rec.samples[#rec.samples + 1] =
-                    { t = rec.t, x = p.X, y = p.Y, z = p.Z, yaw = yaw, speed = sp }
+                rec.samples[#rec.samples + 1] = { t = rec.t, x = p.X, y = p.Y, z = p.Z, yaw = yaw, speed = sp }
             end
         end
     end
@@ -358,8 +419,13 @@ local function onFrame()
     if drive.mode == "ghost" then
         ghostTick(a, cmc)
         if drive.tick % 180 == 0 then
-            log(("ghost: t %.1fs / %.1fs, rate %.2fx")
-                :format(drive.ghostT, drive.trace[#drive.trace].t, drive.rate or 0))
+            log(
+                ("ghost: t %.1fs / %.1fs, rate %.2fx"):format(
+                    drive.ghostT,
+                    drive.trace[#drive.trace].t,
+                    drive.rate or 0
+                )
+            )
         end
         return
     end
@@ -423,9 +489,17 @@ local function onFrame()
     if drive.tick % 180 == 0 then
         local v = cmc.Velocity
         local sp = math.sqrt(v.X * v.X + v.Y * v.Y)
-        log(("drive: st=%s err %.1fm, cmd %.0f, vel %.0f cm/s, dt %.1fms, kin=%s, rate %.2fx")
-            :format(st.name, dist / 100, speed, sp, drive.dt * 1000,
-                tostring(drive.kinematic), drive.rate or 0))
+        log(
+            ("drive: st=%s err %.1fm, cmd %.0f, vel %.0f cm/s, dt %.1fms, kin=%s, rate %.2fx"):format(
+                st.name,
+                dist / 100,
+                speed,
+                sp,
+                drive.dt * 1000,
+                tostring(drive.kinematic),
+                drive.rate or 0
+            )
+        )
     end
 end
 
@@ -483,8 +557,7 @@ end)
 -- F4: cycle drive mode OFF -> ESCORT -> GHOST -> OFF.
 RegisterKeyBind(Key.F4, function()
     ExecuteInGameThread(function()
-        local nextMode = ({ off = "escort", escort = (drive.trace and "ghost" or "off"),
-            ghost = "off" })[drive.mode]
+        local nextMode = ({ off = "escort", escort = (drive.trace and "ghost" or "off"), ghost = "off" })[drive.mode]
         if nextMode ~= "off" and not (probe.puppet and probe.puppet:IsValid()) then
             log("F4: no live puppet - F3 first")
             return
@@ -520,16 +593,5 @@ RegisterKeyBind(Key.F4, function()
     end)
 end)
 
--- F9: object dump (own bind now that MolotovFire is retired; harmless double-dump if both loaded)
-RegisterKeyBind(Key.F9, function()
-    log("F9 object dump starting (game will hitch)")
-    local ok, err = pcall(function()
-        if type(DumpAllObjects) == "function" then
-            DumpAllObjects()
-            log("F9 dump complete -> ue4ss/UE4SS_ObjectDump.txt")
-        else
-            log("F9: DumpAllObjects not exposed in this UE4SS build")
-        end
-    end)
-    if not ok then log("F9 dump ERR: " .. tostring(err)) end
-end)
+-- F9 object-dump bind removed: F9 opens Mod Configuration Menu. Use UE4SS's built-in
+-- Keybinds ObjectDumper for dumps.

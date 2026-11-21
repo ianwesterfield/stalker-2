@@ -7,24 +7,79 @@ Projects here:
 | **Molotov Cocktail**  | Throwable molotov: impact detonation, ground fire, burn DoT, hand-authored bottle                                                                               | Playable, iterating on polish                    |
 | **ZoneLink**          | Co-op presence experiment — see each other as stalker puppets ([details](#zonelink--co-op-presence-experimental))                                               | Tier A ghost verified                            |
 | **ZoneXM**            | Conversation awareness for your own music — ducks Windows audio when the Zone demands attention ([details](#zonexm--conversation-awareness-for-external-music)) | Working: gunfire, mutants, dialogue              |
-| **ZoneStash**         | Quest-item transfers through personal stash context menus ([details](#zonestash--quest-items-in-personal-stashes))                                              | Personal-stash deposit/retrieval verified by Ian |
+| **QuestStash**        | Quest-item transfers through personal stash context menus ([details](#queststash--quest-items-in-personal-stashes))                                             | Personal-stash deposit/retrieval verified by Ian |
 | **English Zone port** | Workshop English signage mod ported from UE 5.1 to 2.1.0 / UE 5.5 ([details](mods/english-zone/README.md))                                                      | 471 assets, in-game verified                     |
+| **ZoneAtlas**         | Cycle PDA map styles in-game (vanilla satellite, Topographic, Topographic Dark...) with a hotkey ([details](#zoneatlas--switch-pda-map-styles-in-game))         | Working in-game; auto-sync at launch, MCM cycle  |
 
 ## Layout
 
 ```
 mods/<mod>/       one folder per mod: scripts/, src/, ue4ss/, pak/, docs/ as needed
 shared/scripts/   paths.ps1 (central config), deploy-ue4ss.ps1, extract-gamedata.ps1
-shared/tools/     bin2cfg, make_locres, find_guobjectarray, Lua test harness
+shared/tools/     bin2cfg, find_guobjectarray, Lua test harness
 shared/docs/      cross-mod modding notes
 ```
 
 Source code, pipeline logic, docs, and the companion's supplied artwork/licensed fonts are committed.
 Game data (`extracted/`), vanilla reference
-assets, generated locres and all build output (`build/`, `bin/`, `obj/`, `out/`) are
+assets and all build output (`build/`, `bin/`, `obj/`, `out/`) are
 regenerated locally. Run scripts from the repo root.
 
-## ZoneStash - quest items in personal stashes
+## ZoneAtlas — switch PDA map styles in-game
+
+Press **F6** on the PDA map, or click the **Map style** prompt in the map's bottom hint bar, to
+cycle styles; **Shift+F6** goes back. A short toast names the active map, and the choice is
+remembered between sessions. No mod is toggled at runtime.
+Instead, the builder copies every installed map mod's texture to its own path inside one local
+container. The Lua runtime then swaps the `MapTexture` parameter on the world-map scene's
+dynamic material. Only `Texture2D` packages named `T_DLCWorldMap_UDIM`/`T_WorldMap_UDIM` are
+ever taken, so non-map mods cannot enter the cycle. True vanilla is bundled from the game files.
+Your map mods can stay installed: whichever wins becomes the game's default, and ZoneAtlas
+overrides it.
+ZoneAtlas keeps its modules inside its own `Scripts` folder: `catalog.lua`,
+`texture_catalog.lua`, `world_map.lua`, `mcm.lua`, `toast.lua`, `hint_bar.lua`, and the
+mod-local `unreal.lua` helpers. These are ordinary Lua modules with one state per mod:
+`catalog.lua` owns configuration and selection, while the entrypoint coordinates polling
+and input. There are no factories or cross-mod runtime dependencies. UObject work stays
+on the game thread, and texture compatibility and stale-object checks remain in place.
+
+**Setup (once):** run `.\mods\zoneatlas\scripts\deploy-zoneatlas.ps1` (game closed), then set
+Steam → S.T.A.L.K.E.R. 2 → Properties → **Launch options** to:
+
+```text
+"C:\Code\westerfield.cloud\Gaming\stalker-2\mods\zoneatlas\scripts\zoneatlas-launch.cmd" %command%
+```
+
+From then on, every launch picks up whatever map mods are installed (Vortex staging, `Paks\~mods`,
+`Stalker2\Mods`, Steam Workshop), from any source. Unchanged mods add about a second. An added,
+removed or updated map mod triggers a rebuild of about 15 s, then the game starts and the launcher
+window closes without waiting for the game to exit. A mod that
+can't be converted is skipped with a warning; for example, Alternative World Map is packed for a
+pre-2.0 game version. The sync never blocks the launch; its log is `build\zoneatlas\sync.log`.
+To sync by hand instead, run `.\mods\zoneatlas\scripts\sync-zoneatlas.ps1`.
+
+**Choosing the cycle in-game:** with [Mod Configuration Menu 2.0](https://www.nexusmods.com/stalker2heartofchornobyl/mods/2225)
+installed, load a save and open MCM (F9) → **ZoneAtlas**. Every bundled map is a checkbox,
+and new maps arrive ticked. Unticked maps are skipped by F6. MCM stores the ticks in the save
+game, so they apply per save. If nothing is ticked, or MCM is missing, every bundled map cycles.
+MCM has no way to remove a setting, so a map mod you uninstall leaves a dead checkbox in that
+save. The checkbox does nothing.
+
+No build configuration file is needed: vanilla is always included as `Vanilla`, and installed
+map names are derived from their container filenames without hard-coded name overrides.
+The former `Satellite` and `Topographic (Dark)` labels become `Vanilla` and `Topographic Map Dark`;
+MCM treats renamed entries as new checkboxes, and a saved selection with an old name resets
+to the first map. In-game settings live in `ue4ss\ZoneAtlas\Scripts\config.lua`:
+the key, the open-map gate, the toast duration, the hint-bar prompt (`ShowHint`, `HintLabel`) and
+MCM use (`UseMCM`). retoc writes the container uncompressed, so a Topographic-size map costs about
+3.2 GB of disk; vanilla costs about 200 MB. The build output is hardlinked into `~mods`.
+
+Known limits: the "map is open" gate is heuristic, so set `OnlyWhenMapOpen = false` if F6 seems
+dead. A variant whose virtual-texture setting differs from the PDA's is skipped, not applied.
+If the hint-bar prompt misbehaves, set `ShowHint = false`; if MCM causes trouble, `UseMCM = false`.
+Keep F6 and F9 free in other UE4SS mods. F9 is MCM's hotkey, and a debug object dump on F9 froze
+the game while MCM opened.
+## QuestStash - quest items in personal stashes
 
 This separate native ASI prototype restores only the game's transfer actions for protected,
 unequipped items while a **personal stash** is open. Right-click an item in your backpack
@@ -39,24 +94,24 @@ verified by Ian on 2026-11-06, including storing Skif's pistol; the storage scre
 shows its protection icon. Save/reload persistence and quest progression remain unverified.
 
 ```powershell
-.\mods\zonestash\scripts\build-zonestash.ps1
+.\mods\quest-stash\scripts\build-quest-stash.ps1
 # Close the game first. Adds winhttp.dll only if absent; leaves UE4SS untouched.
-.\mods\zonestash\scripts\deploy-zonestash.ps1 -InstallLoader
+.\mods\quest-stash\scripts\deploy-quest-stash.ps1 -InstallLoader
 # Remove only this mod; leaves the shared loader in place:
-.\mods\zonestash\scripts\deploy-zonestash.ps1 -Remove
+.\mods\quest-stash\scripts\deploy-quest-stash.ps1 -Remove
 ```
 
 Requires the Visual Studio x64 C++ tools to build. The installer downloads the official
 [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader) 10.0.2 archive
 with a pinned SHA-256 when requested; it never replaces an existing loader.
 The plugin requires the exact verified Steam 2.1.0 executable and disables itself on
-other builds or a conflicting inventory vtable hook. Check `ZoneStash.log` beside
+other builds or a conflicting inventory vtable hook. Check `QuestStash.log` beside
 `Stalker2-Win64-Shipping.exe` for `ACTIVE` or a specific refusal reason.
 Do not unload the plugin during play; installation/removal requires a restart.
 
 The build runs policy and native-memory fixture tests. These verify destination scoping
 and that only the intended menu bytes change; they do not prove in-game transfer safety.
-The [native source](mods/zonestash/src/) and
+The [native source](mods/quest-stash/src/) and
 [investigation notes](shared/docs/modding-notes.md#personal-stash-quest-item-prototype) are separate
 from ZoneXM and MolotovFire.
 
@@ -86,7 +141,7 @@ All under [mods/molotov-cocktail/](mods/molotov-cocktail/):
 | Burning victims       | same file                                                                                                                           | `ConcussionEffects`/`NPCConcussionEffects` → `FireBurning` (burn damage over time)                 |
 | Bottle meshes         | [MolotovMeshes.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/MeshPrototypes/MolotovMeshes.cfg)                  | Points at our own `/MolotovBottle` plugin: `SK_MolotovBottle` (hand), `SM_MolotovBottle` (world)   |
 | Buyable at bartenders | [MolotovTradeStock.cfg](mods/molotov-cocktail/pak/Stalker2/Content/GameLite/GameData/ItemGeneratorPrototypes/MolotovTradeStock.cfg) | `{bpatch}` named-node append on `BartenderUniversal_TradeItemGenerator` (mod-friendly)             |
-| Name + description    | [localization.en.csv](mods/molotov-cocktail/localization/localization.en.csv)                                                       | Full `Game.locres` override rebuilt from vanilla + added keys (pylocres; generated, not committed) |
+| Name + description    | [localization.en.csv](mods/molotov-cocktail/localization/localization.en.csv)                                                       | `editor_import_text.py` writes the plugin's Text Tool asset + `Autogenerated_*_LocalizationDatabase`; the game layers it over vanilla text (no `Game.locres` override) |
 
 ## Custom bottle asset (the fun part)
 
@@ -95,8 +150,7 @@ headlessly: Blender mesh build → FBX sanity checks → preview renders → Zon
 import (materials, slots, physics) → cook → deploy. The asset is a cossack-vodka bottle on the
 RGD-5 grenade skeleton with a cloth plug and a physics-simulated rag tail on its own bone
 (`jnt_fuse`); the burning rag is the game's own `NS_Character_Fire` Niagara system attached at
-runtime. The old skinned flame cards ship invisible (`OpacityBoost 0`) but keep their
-geometry/slots so the flight-look and physics code stay stable.
+runtime. The mesh has three material slots: vodka glass, vodka label and `M_MolotovRag`.
 
 Techniques worth stealing:
 
@@ -105,29 +159,26 @@ Techniques worth stealing:
   bind pose is bit-identical to vanilla grenades. The editor preview lies; only cooked output counts.
 - **FP seating** — first-person weapons need GSC's foreground-FOV WPO correction
   (`MF_ForegroundWithShadowSwitch` fed from `MPC_FOV`'s `TanFOV`) or the mesh floats off the hand.
-  The additive flame uses the core `MF_Foreground_FOVCorrection` only (the full switch streaks).
-- **Flame = the game's own Niagara fire.** `NS_Character_Fire` attached to the rag bone at runtime
-  beats every hand-built flame card we tried. The card materials remain as invisible stubs — and
-  taught the big lesson: Zone Kit's Python `MaterialProperty` enum is stripped (no WPO pin, no
+- **Flame = the game's own Niagara fire.** `NS_Character_Fire` attached to the rag bone at runtime.
+- **Scripted materials** — Zone Kit's Python `MaterialProperty` enum is stripped (no WPO pin, no
   `MP_MATERIAL_ATTRIBUTES`), and wiring a graph to `MP_FRONT_MATERIAL` (the Substrate pin)
-  "compiles clean" into an **empty shader** — emissive black, opacity 1.0, every param compiled
-  out. Non-Substrate game ⇒ classic pins only (`MP_EMISSIVE_COLOR`, `MP_OPACITY`), and assert
-  every `connect_material_property`.
-- **Vertex colors as data bus** — R = droop weight, G = solidify shell sign, B = bend height,
-  A = orange↔blue tint lerp. Note: `VertexColor`'s RGB output is float3 — take alpha from the
-  dedicated `A` pin or the cook's shader translation fails (the editor won't warn you).
+  "compiles clean" into an **empty shader**. Non-Substrate game ⇒ classic pins only
+  (`MP_EMISSIVE_COLOR`, `MP_OPACITY`), and assert every `connect_material_property`.
+- **Vertex colors as data bus** — R = droop weight, G = solidify shell sign. `VertexColor`'s RGB
+  output is float3 — take alpha from the dedicated `A` pin or the cook's shader translation fails
+  (the editor won't warn you).
 
 ## Runtime behavior (UE4SS)
 
-[MolotovFire](mods/molotov-cocktail/ue4ss/MolotovFire/Scripts/main.lua): impact detonation via the grenade's hit
+[MolotovFire](mods/molotov-cocktail/ue4ss/MolotovFire/Scripts/): impact detonation via the grenade's hit
 event (vanilla `BP_grenade` is timer-only), ground fire patches spawned from `BP_BonFire` with
 staggered lifetimes, soft-landing fuse fallback, the burning-rag fire itself
 (`NS_Character_Fire` attached to `jnt_fuse`, doused on throw), the rag physics kick
-(pooled weapon meshes never create physics state on their own), flight-look material pinning,
+(pooled weapon meshes never create physics state on their own), the in-flight rag droop (pins
+`M_MolotovRag`'s `DroopStrength` on the thrown static twin),
 and two field rules: **menu crafting** (right-click vodka or bandages in the backpack while carrying
 vodka and a bandage and a **Make Molotov** entry joins the context menu; one click spends one
-of each and wraps a bottle — the old Bottle Prep Kit item is retired but stays defined for
-save compatibility) and a **hold singe** — while the
+of each and wraps a bottle) and a **hold singe** — while the
 rag burns in hand you slowly lose HP (~0.33 HP/s, floored so it can't kill you), applied with
 `Obj:ForceSetHP` so it lands silently. Every damage-typed route drags its own feedback along:
 Burn triggers the engine's player-on-fire reaction (roaring audio that buries the mix, red
@@ -147,13 +198,31 @@ are checked before adding the row and again on click; stale rows are removed. Un
 icons suppress crafting with a diagnostic. Mods replacing those icon assets require updating
 the allowlist; items reusing the same textures cannot be distinguished by this UI-only check.
 
+The Lua follows the workspace [shared](../../Standards/conventions/coding/shared.md) and
+[Lua](../../Standards/conventions/coding/lua.md) conventions, split by responsibility inside
+[MolotovFire's Scripts folder](mods/molotov-cocktail/ue4ss/MolotovFire/Scripts/):
+
+| Module | Responsibility |
+| --- | --- |
+| `main.lua` | Startup, timer registration order, equip watcher and hands-changed cleanup |
+| `unreal.lua` | Logging and defensive UObject helpers |
+| `hands.lua` | Shared in-hands state (`fp`, montage latch, equip generation) and molotov-mesh lookup |
+| `rag_fire.lua` | Rag physics kick, rag/tip fire on the held bottle, douse |
+| `pin_pull.lua` | Skips the RGD5 `TearOff` montage section on throw |
+| `hold_burn.lua` | Silent HP singe while the lit bottle is held |
+| `grenade_tracker.lua` | Thrown-grenade watcher, flight-look rag droop, impact/fuse detonation |
+| `ground_fire.lua` | Ground fire pool spawn, expiry and NPC burns |
+| `crafting.lua` | Quest-node craft chain, inventory counts and backpack repaint |
+| `craft_menu.lua` | **Make Molotov** context-menu row, hover mirror and LMB click |
+
+Format it with `stylua --config-path mods/molotov-cocktail/stylua.toml mods/molotov-cocktail/ue4ss/MolotovFire/Scripts`.
+
 ## Pipeline
 
 ```
 # game-data pak (molotov scripts live in mods/molotov-cocktail/scripts/)
 shared/scripts/extract-gamedata.ps1  # unpack pakchunk0 cfg.bin -> extracted/, decode via shared/tools/bin2cfg.py
-build-locres.ps1                     # vanilla Game.locres + localization/*.csv rows -> pak/ (pylocres)
-pack-mod.ps1                         # pak/ -> build/MolotovCocktail_P.pak (repak V11, mount ../../../)
+pack-mod.ps1                         # pak/ -> build/MolotovCocktail_P.pak (repak V11, mount ../../../; rejects any .locres)
 deploy-mod.ps1                       # copy into <game>/Stalker2/Content/Paks/~mods  (-Remove uninstalls)
 shared/scripts/deploy-ue4ss.ps1      # sync mods/*/ue4ss/* -> <game>/Stalker2/Binaries/Win64/ue4ss/Mods
 #   also re-derives the GUObjectArray AOB from the installed exe (shared/tools/find_guobjectarray.py):
@@ -162,11 +231,15 @@ shared/scripts/deploy-ue4ss.ps1      # sync mods/*/ue4ss/* -> <game>/Stalker2/Bi
 
 # bottle asset (Zone Kit required; editor and game closed)
 asset-pipeline/pipeline.ps1          # Blender -> checks -> previews -> headless editor -> cook -> deploy
+#   the headless editor step also turns localization/*.csv into the plugin's Text Tool asset
+#   and its localization database (the headless cook doesn't generate the database itself);
+#   the cook emits NewContent + OverrideContent containers (the database ships in OverrideContent)
 #   -SkipBlender -SkipPreviews -SkipEditor -SkipCook -SkipDeploy for partial runs
-#   gates on log sentinels (HEADLESS_ALL_DONE, *_MAT_DONE, ...) because UE exit codes lie
+#   gates on log sentinels (HEADLESS_ALL_DONE, SLOTS_FIXED, ...) because UE exit codes lie
+asset-pipeline/build_icon.py         # Blender render of the inventory icon (then compose_icons.py)
 ```
 
-Prereqs: repak (`C:\Tools\repak`), Python 3.11 + `pylocres`, Blender 5.x, STALKER 2 Zone Kit
+Prereqs: repak (`C:\Tools\repak`), Python 3.11, Blender 5.x, STALKER 2 Zone Kit
 (Epic Games Store), UE4SS. Paths are centralized in [shared/scripts/paths.ps1](shared/scripts/paths.ps1).
 `build_molotov.py` needs the vanilla `SK_RGD5.FBX` exported with FModel into
 `asset-pipeline/ref/Game/_STALKER2/SkeletalMeshes/weapons/grenades/RGD5/` (gitignored).
@@ -181,8 +254,12 @@ translation cooks "successfully" and ships as the checkerboard.
   under `GameData/` are picked up, structs inherit cross-file via `{refurl=..;refkey=SID}`.
 - `{bpatch}` roots merge into an existing prototype by struct name instead of replacing the file —
   but only at root level; nested `{bpatch}` does nothing.
-- All vanilla locres entries have `SourceStringHash = 0`; new keys must match.
-  UnrealLocres `import` cannot add keys — hence pylocres.
+- All vanilla locres entries have `SourceStringHash = 0`. Mods don't touch locres at all: new
+  keys go in the mod's own `*_LocalizationDatabase`, which the game merges over vanilla text.
+  The game only merges it from the mod's **OverrideContent** container (remapped to
+  `/Game/Autogenerated_*`). A NewContent-only cook ships the database but the game never reads it,
+  so the item shows raw `sid_items_*` keys. `pipeline.ps1` runs `GSCCookMod` with the same
+  classifier split as the GUI's "Package mod" (database → override, everything else → new).
 - The grenade quick-slot cycles by **`EGrenadeType` enum**, not item SID. The shipping exe
   already defines `EGrenadeType::Molotov` (and `::Dynamite` — hello, cut content), so the mod
   claims the native type and gets its own entry in the grenade cycle.
@@ -193,7 +270,8 @@ translation cooks "successfully" and ships as the checkerboard.
 
 1. Launch (cfg pak in `~mods` and `MolotovBottle` plugin paks load automatically; UE4SS mods via `enabled.txt`).
 2. Buy from the Zalissya bartender (restocks on timer; sleep/wait if absent) — or open the
-   backpack and **use the Bottle Prep Kit**: one vodka and one bandage spent, molotov in its place.
+   backpack, right-click vodka or a bandage and pick **Make Molotov**: one vodka and one
+   bandage spent, molotov in its place.
 3. Equip grenades and **cycle the grenade slot** — the molotov is its own grenade type.
 4. In hand: bottle with cloth plug, physics rag tail swinging with movement, Niagara fire +
    smoke riding the rag, all seated on the hand and following every animation — and your HP
@@ -204,14 +282,10 @@ translation cooks "successfully" and ships as the checkerboard.
 
 ## Known limitations / next ideas
 
-- Inventory icon is the vanilla Cossacks vodka art; the Bottle Prep Kit uses a rendered
-  composite icon (`T_MolotovKitIcon`, built by [build_icon.py](mods/molotov-cocktail/asset-pipeline/build_icon.py)).
-- In-flight bottle shows no flame (card flames retired; candidate: attach the Niagara fire to
-  the thrown grenade actor).
+- In-flight bottle shows no flame (candidate: attach the Niagara fire to the thrown grenade actor).
 - The `MolotovBottle` plugin paks must be cooked locally with Zone Kit; they're not committed.
-- English locres only; add `localization.<lang>.csv` and pass `-Languages` to extend.
-- After a game patch: re-run `build-locres.ps1` + `pack-mod.ps1` + `deploy-mod.ps1`
-  (locres is a full-file override and must be rebuilt against the new vanilla).
+- Text covers all 18 game languages (`localization/localization.<culture>.csv`, `key,text`).
+  A new key needs a row in every file; the editor step rejects partial coverage.
 
 ---
 
@@ -235,7 +309,7 @@ delay. That yields a three-tier test ladder:
 | **C — LAN**      | 2 machines, 2 licenses           | End-to-end bidirectional                                      | Later        |
 
 Current Tier-A build keys: **F2** record own movement to trace · **F3** spawn + protect puppet ·
-**F4** cycle drive OFF → ESCORT (10 m stations) → GHOST (trace replay) · **F9** object dump.
+**F4** cycle drive OFF → ESCORT (10 m stations) → GHOST (trace replay) · **Ctrl+J** object dump (UE4SS built-in; F9 is MCM).
 
 Hard-won findings baked into the build:
 
@@ -262,22 +336,50 @@ lands; for now it rides along here.
 
 _"Many stalkers were hurt in the making of this modification... of course."_
 
-Play your own music over the game; ZoneXM ducks it — every app except the game, each to a
-fraction of its own volume — whenever the Zone needs your ears, and fades it back when the
-dust settles. Two cooperating halves joined by a flag file:
+Play your own music over the game; ZoneXM ducks other apps on the default Windows audio
+device whenever the Zone needs your ears, and fades them back when the dust settles.
+The companion excludes the Steam game process; game audio in other editions may also be
+ducked. Two cooperating halves are joined by a flag file:
 
 | Half      | Lives in                                                                       | Does                                                                                                                   |
 | --------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Sensor    | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)             | Detects danger/speech in-game, keeps `%LOCALAPPDATA%\ZoneXM\alert.flag` alive while it lasts                           |
+| Sensor    | [mods/zonexm/ue4ss/ZoneXM/](mods/zonexm/ue4ss/ZoneXM/) (UE4SS Lua)             | Detects danger/speech in-game, keeps `%USERPROFILE%\ZoneXM\alert.flag` alive while it lasts                           |
 | Companion | [ZoneXM Companion](mods/zonexm/src/ZoneXM.Notifications/) (native Windows app) | Polls the flag, ducks per-app CoreAudio session volumes, restores them, and optionally forwards selected notifications |
 
-### Player setup (planned Microsoft Store release)
+The mod follows the workspace [shared](../../Standards/conventions/coding/shared.md)
+and [Lua](../../Standards/conventions/coding/lua.md) conventions. Its Lua modules stay
+inside [ZoneXM's Scripts folder](mods/zonexm/ue4ss/ZoneXM/Scripts/):
 
-The companion is not published in the Store yet. The intended player setup is:
+| Module | Responsibility |
+| --- | --- |
+| `main.lua` | Startup and the game-thread poll |
+| `sensors.lua` | Combat, speech and mutant detection; alert heartbeat |
+| `bridge.lua` | Shared-file paths, bounded snapshot validation and alert I/O |
+| `banner.lua` | Event selection, display formatting, widget layout and lifetime |
+| `subtitle_style.lua` | Read-only subtitle capture and saved styling |
+| `unreal.lua` | Shared widget operations and bounded host-error reporting |
 
-1. Install UE4SS and extract the matching Steam or Game Pass ZoneXM mod archive into the game folder.
-2. Install **ZoneXM Companion** from the Microsoft Store and launch it before playing.
-3. Optionally allow Windows notification access and select the apps whose notifications should appear in game.
+State belongs to one module per UE4SS mod Lua state; there are no factories or
+cross-mod runtime dependencies. Field/channel order in persisted protocols and
+native API parameters is intentional, not alphabetically sorted.
+Format this mod with `stylua --config-path mods/zonexm/stylua.toml mods/zonexm/ue4ss/ZoneXM/Scripts`
+(MolotovFire: `stylua --config-path mods/molotov-cocktail/stylua.toml mods/molotov-cocktail/ue4ss/MolotovFire/Scripts`).
+Legacy watchdog interop lives in `mods/zonexm/scripts/AudioSessions.cs`, beside
+the PowerShell script that compiles it. Keep those files together when using the
+legacy watchdog; the native companion does not depend on either.
+
+### Player setup
+
+1. Install a UE4SS build compatible with the game version and edition.
+2. Install the matching ZoneXM archive using Vortex's S.T.A.L.K.E.R. 2 extension, or extract
+   it manually into the game installation folder containing `Stalker2`. In Vortex, enable
+   and deploy the mod; if the UE4SS Load Order page is enabled, enable ZoneXM there too.
+3. Install [ZoneXM Companion](https://apps.microsoft.com/detail/9pcw3mjw0zwl) from the
+   Microsoft Store and keep it running while playing.
+4. Enable in-game subtitles for speech detection.
+5. To use banners, enable Windows notifications, allow notification access in the companion,
+   and select the apps to forward. Only new Notification Center entries from selected apps
+   are forwarded.
 
 Audio ducking does not require notification permission. The companion includes its .NET and
 Windows App SDK runtimes: players will not need an SDK, PowerShell 7, a terminal command,
@@ -285,12 +387,32 @@ Developer Mode, or a manually trusted certificate for the Store installation. Th
 and UE4SS remain separate prerequisites; the companion does not install them or start at logon.
 The PowerShell commands below are developer or legacy workflows, not companion installation steps.
 
+The game-side footprint is `Stalker2\Binaries\Win64\ue4ss\Mods\ZoneXM` on Steam, or
+`Stalker2\Binaries\WinGDK\ue4ss\Mods\ZoneXM` for the Game Pass archive. Its `Scripts`
+folder contains the six modules listed above. The companion and mod exchange files in
+`%USERPROFILE%\ZoneXM`, outside the game installation. Generate both archives with
+`.\mods\zonexm\scripts\package-zonexm.ps1`; they are written to `build\release`.
+The Game Pass package and audio exclusion still need in-game verification.
+
+#### Migrating a manual install to Vortex
+
+With the game closed, disable ZoneXM in Vortex and deploy before touching its game folder.
+Vortex may restore previously overwritten manual files from `.vortex_backup` files. Once
+deployment finishes and Vortex's links are removed, move any remaining `ue4ss\Mods\ZoneXM`
+folder outside the game as a backup. Then enable ZoneXM in Vortex and deploy again. Do not
+run the manual deployment script over a Vortex-managed installation.
+
+The UE4SS build used here also starts mods with an `enabled.txt` marker independently of
+`mods.txt`, so a leftover manual marker can enable ZoneXM even when its load-order entry is
+disabled. With Vortex's UE4SS Load Order enabled, verify that no unmanaged marker remains;
+when that feature is disabled, Vortex may intentionally manage the marker instead.
+
 ### Now-playing banners (legacy script prototype)
 
 GSMTC now-playing support is not yet integrated into the companion. This optional prototype
 still uses PowerShell; it is not required for native audio ducking or Notification Center banners.
-The recommended Store release path is to port this small read-only bridge into the companion
-before advertising media-session banners, rather than require players to run another script.
+For a future release, port this read-only bridge into the companion before advertising
+media-session banners, rather than require players to run another script.
 
 The watchdog also launches the read-only [Windows media bridge](mods/zonexm/scripts/zonexm-media.ps1).
 It reads Windows Global System Media Transport Controls (GSMTC), not a Pandora-specific
@@ -330,7 +452,7 @@ identical metadata cannot be distinguished from the previous play.
 
 Windows PowerShell **5.1** runs the WinRT bridge; the audio watchdog still runs on **7+**.
 The watchdog supervises its hidden child and keeps ducking if the bridge fails. Diagnostics
-are `media.log` and `media-error.log` in `%LOCALAPPDATA%\ZoneXM`.
+are `media.log` and `media-error.log` in `%USERPROFILE%\ZoneXM`.
 
 ```powershell
 .\shared\scripts\deploy-ue4ss.ps1 -Mods ZoneXM -SkipSignatures
@@ -360,7 +482,7 @@ database scraping, or network services. All apps use the same bottom-right quest
 `Title - Body` banner (title only when the body is empty), with no app heading or `+1` prefix.
 Title is subtitle-speaker yellow; body and separator are subtitle-dialogue white.
 Subtitle styling exists only after someone speaks, so ZoneXM saves the captured style to
-`%LOCALAPPDATA%\ZoneXM\subtitle-style.txt`. The file stores font/material asset
+`%USERPROFILE%\ZoneXM\subtitle-style.txt`. The file stores font/material asset
 paths, size, colors, and shadow values, never notification text. It rebuilds that style on a fresh
 load before anyone has spoken. Before any subtitle has ever been captured, or if the saved font
 cannot be loaded, banners still show with the game's default text font and yellow/white colors.
@@ -394,7 +516,7 @@ that disappear between polls.
   (for example `0x80070005`) are logged and retried with backoff of 5-60 seconds instead of
   stopping forwarding. **Pause forwarding** remains manual until the next launch or Start.
 - Apps appear as Windows exposes them. Check each app you want to forward; consent persists
-  by exact Windows app ID in `%LOCALAPPDATA%\ZoneXM\helper-settings.json`.
+  by exact Windows app ID in `%USERPROFILE%\ZoneXM\helper-settings.json`.
   Newly discovered/reopened apps stay unchecked unless previously opted in.
   Legacy `notification-apps.json` exclusions are retained but never converted into consent:
   upgrading starts with no opted-in apps. Changing consent skips accumulated history.
@@ -418,8 +540,9 @@ that disappear between polls.
   when the window opens, even before notification permission is granted. The audio checkbox
   disables/enables ducking; the separate notification pause button does not disable audio.
   Exiting the app restores volumes. No PowerShell process is needed for this path.
-- Built-in ducking follows the existing defaults: all app sessions except the game and
-  Windows system sounds on the default output device. The **volume retained while ducked**
+- Built-in ducking follows the existing defaults: app sessions on the default output device,
+  except Windows system sounds and the Steam game process. Other editions' game audio may
+  also be ducked. The **volume retained while ducked**
   slider selects 0-100% of each session's original volume (default 15%; 0 mutes, 100 leaves
   volume unchanged), persists across launches, and applies during active ducking too.
   It keeps the existing
@@ -461,43 +584,71 @@ Developer build/install (Windows x64, .NET 10 SDK, Windows SDK with MakeAppx):
 # Restart the game to load the updated Lua reader.
 dotnet run --project .\mods\zonexm\src\ZoneXM.Notifications.Tests -c Release
 lua54 shared/tools/test-ue4ss.lua .
+pwsh -NoProfile -File .\mods\zonexm\scripts\test-zonexm-watchdog.ps1
+powershell -NoProfile -File .\mods\zonexm\scripts\test-zonexm-media.ps1
 ```
 
 The build produces a self-contained, unsigned development MSIX and a registerable folder
-under `build/zonexm-notifications`. Keep the registered folder in place. Exit the companion from the tray
+under `build/zonexm-notifications`. It references the WinUI SDK component rather than the
+full AI/ML/widgets bundle. SDK reference WinMDs stay build-time only; the C#/WinRT
+projection assemblies, native runtime binaries and activation registrations are retained.
+Keep the registered folder in place. Exit the companion from the tray
 before rebuilding it. Distribution to other machines would require an appropriate
 package-signing/install workflow; no certificate trust changes are made here.
 Uninstall with `Get-AppxPackage -Name ZoneXM.Notifications | Remove-AppxPackage`
 after exiting the companion; consent and ducking settings in the shared ZoneXM folder are retained.
 
-### Microsoft Store readiness
+**Storage update (Companion 1.3.1 / mod 1.0.1):** update both components together and
+restart them. Shared files now live in `%USERPROFILE%\ZoneXM`, outside MSIX's AppData
+write virtualization. The companion no longer requests `unvirtualizedResources` or
+disables file virtualization. On first run it imports a valid legacy
+`%LOCALAPPDATA%\ZoneXM\helper-settings.json` only when new settings do not exist,
+preserving the duck level and exact opt-in list. Invalid legacy settings are reported;
+they never silently grant consent. Notification text, flags, snapshots, logs, and the old
+subtitle-style cache are not copied. The game regenerates its style cache.
+Old files remain untouched and may be deleted manually once the upgrade works.
+Do not mix an old companion/watchdog/mod with the new versions: they use different folders.
 
-The local package is a development build, not a certified Store release. Remaining work:
+### Microsoft Store release and maintenance
 
-- Reserve **ZoneXM Companion** in Partner Center and obtain the exact package Identity Name,
-  Publisher and Publisher Display Name from **Product identity**. The checked-in
+ZoneXM Companion is published in the Microsoft Store. The checked-in manifest uses a
+development identity; Store builds use the Partner Center identity. For future releases:
+
+- Use the exact package Identity Name, Publisher and Publisher Display Name from
+  Partner Center's **Product identity**. The checked-in
   `ZoneXM.Notifications` / `CN=ZoneXM` values are development placeholders.
 - Produce the self-contained x64 MSIX with those identity values. Use the existing
   `-IdentityName`, `-Publisher`, `-PublisherDisplayName` and `-Version` build parameters;
   the fourth version component must be zero. Use a separate `-OutputDirectory` and do not
   register the Store-identity draft over the local development install. Microsoft signs
   approved Store packages; local sideloading has a separate signing/trust workflow.
-- Supply certification notes explaining `runFullTrust` (desktop WinUI, CoreAudio and tray),
-  `unvirtualizedResources` (the shared `%LOCALAPPDATA%\ZoneXM` folder), and
-  `userNotificationListener` (explicit permission plus per-app opt-in). Restricted-capability
-  acceptance must be checked in Partner Center; local MakeAppx validation is not Store approval.
-- Review Notification Center forwarding against Store policy 10.9 before submission:
+  The build passes the final identity into PRI generation and keeps identity-specific
+  intermediate indexes; renaming a development PRI does not change its resource-map identity.
+- Supply certification notes explaining `runFullTrust` (desktop WinUI, CoreAudio and tray)
+  and `userNotificationListener` (explicit permission plus per-app opt-in).
+  `unvirtualizedResources` and all virtualization overrides have been removed.
+  Shared files use a normal user-owned folder outside AppData, which
+  [MSIX permits without a virtualization exclusion](https://learn.microsoft.com/en-us/windows/msix/desktop/flexible-virtualization#default-msix-behavior).
+  Check capability acceptance for updates in Partner Center; local MakeAppx validation
+  is not Store approval.
+- Review Notification Center forwarding against Store policy 10.9 before updates:
   retained entries can currently appear in-game under Do Not Disturb or disabled Windows
   banners. Explain the behavior and resolve any required policy change before shipping.
-- Publish the [privacy policy](mods/zonexm/PRIVACY.md) and support contact at public HTTPS
-  URLs. Prepare screenshots, an accurate description, age-rating answers and certification
+- Keep the [privacy policy](mods/zonexm/PRIVACY.md) and support contact at public HTTPS
+  URLs. Maintain screenshots, an accurate description, age-rating answers and certification
   test steps. Disclose the game, UE4SS and ZoneXM mod dependency at the start of the listing;
   confirm redistribution rights for supplied artwork and keep bundled font license notices.
 - Run Windows App Certification Kit and a fresh-account/machine install, upgrade and uninstall
   check. Verify notification denial/revocation, shared-file access, audio restoration, tray
   behavior, high contrast and mixed DPI; test the Steam and Game Pass mod packages in-game.
-- Either ship only the native audio/notification features or integrate GSMTC now-playing in
-  C# first. For GSMTC, review `globalMediaControl` capability requirements for the packaged
+  WACK 10.0.28000.2957 package analysis of Companion 1.3.1 passes resource and metadata
+  validation (23 passes, one optional blocked-executables failure). The remaining scan
+  findings are in the .NET apphost and bundled Microsoft runtime files, not application
+  calls to launch external executables. Microsoft's [Desktop Bridge test guidance](https://learn.microsoft.com/en-us/windows/uwp/debug-test-perf/windows-desktop-bridge-app-tests#42-blocked-executables)
+  treats this test as informational; review findings after dependency changes rather than
+  deleting required runtime files or modifying vendor binaries to silence the scanner.
+- Continue shipping the native audio/notification features unless GSMTC now-playing is
+  integrated in C# first. For GSMTC, review `globalMediaControl` capability requirements for the packaged
   desktop app and update privacy documentation/tests. Do not advertise that prototype as a
   script-free companion feature before it is implemented.
 

@@ -1,7 +1,6 @@
 # Render the molotov inventory icon from the built bottle+rag mesh, using the
-# real vanilla label art and our own rag cloth. Strip the flames first — the
-# bottle is unlit until it's thrown:
-#   blender -b out/molotov_bottle.blend -P preview_noflame.py -P build_icon.py
+# real vanilla label art and our own rag cloth:
+#   blender -b out/molotov_bottle.blend -P build_icon.py
 # The right-hand cant that matches the vanilla icon is applied in compose_icons.py.
 import math
 import os
@@ -49,12 +48,7 @@ def robust_span(values):
     return vals[lo], vals[hi]
 
 
-# preview_noflame.py deletes the flame FACES but leaves their vertices orphaned,
-# and those strays sit well outside the bottle — measure only what still renders.
-used = set()
-for poly in ob.data.polygons:
-    used.update(poly.vertices)
-pts = [mw @ ob.data.vertices[i].co for i in sorted(used)]
+pts = [mw @ v.co for v in ob.data.vertices]
 xlo, xhi = robust_span(p.x for p in pts)
 ylo, yhi = robust_span(p.y for p in pts)
 zlo, zhi = robust_span(p.z for p in pts)

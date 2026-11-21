@@ -183,7 +183,7 @@ developable against the sim.** Tier C is a validation pass, not a development de
 
 ## 6. Risks and probes
 
-Run against a **fresh F9 dump** (per-session) before writing puppet code. pcall cannot catch
+Run against a **fresh Ctrl+J dump** (per-session) before writing puppet code. pcall cannot catch
 native AVs — save before every spawn experiment; crash logs at
 `%LOCALAPPDATA%\Stalker2\Saved\Crashes\<id>\Stalker2.log`.
 
