@@ -10,6 +10,7 @@ Projects here:
 | **QuestStash**        | Quest-item transfers through personal stash context menus ([details](#queststash--quest-items-in-personal-stashes))                                             | Personal-stash deposit/retrieval verified by Ian |
 | **English Zone port** | Workshop English signage mod ported from UE 5.1 to 2.1.0 / UE 5.5 ([details](mods/english-zone/README.md))                                                      | 471 assets, in-game verified                     |
 | **ZoneAtlas**         | Cycle PDA map styles in-game (vanilla satellite, Topographic, Topographic Dark...) with a hotkey ([details](#zoneatlas--switch-pda-map-styles-in-game))         | Working in-game; auto-sync at launch, MCM cycle  |
+| **ZoneCodex**         | PDA encyclopedia of artifacts, consumables, mutants, and factions, generated   from game data ([details](#zonecodex--pda-encyclopedia))             | Mock-tested; awaiting in-game validation         |
 
 ## Layout
 
@@ -79,6 +80,113 @@ dead. A variant whose virtual-texture setting differs from the PDA's is skipped,
 If the hint-bar prompt misbehaves, set `ShowHint = false`; if MCM causes trouble, `UseMCM = false`.
 Keep F6 and F9 free in other UE4SS mods. F9 is MCM's hotkey, and a debug object dump on F9 froze
 the game while MCM opened.
+
+## ZoneCodex — PDA encyclopedia
+
+ZoneCodex adds a tabbed master/detail codex to the PDA's **Archive** tab: **Artifacts**,
+**Consumables**, **Mutants**, and **Factions**. The game ships that tab hidden,
+with an "In Progress" placeholder page. ZoneCodex shows the tab and fills the page, and the
+game's own "Archive" label is kept. Reach it like any PDA page, with **Q/E** or a click.
+
+The page is laid out like the PDA's **Upgrades** page. Category buttons, built like the Upgrades
+buttons with rounded end caps and centred labels, sit over a framed list of
+entries, each with its inventory icon, name, and a subtitle with the carried count and key facts.
+The detail pane shows the selected entry's icon, title, and text, and a bottom bar shows the
+list position and controls. Long text scrolls in a panel styled like the PDA's Notes page, with
+a thin scrollbar when it overflows. Mutants show their PDA Statistics render beside the text and
+keep their trophy part in the header, and factions show their badges. It is built from the
+game's own PDA textures and font styles, not copied widgets. If images can't be created, the
+page falls back to the same text in the game's fonts.
+
+On the Archive tab, **click** a tab or entry, or use **Left/Right** for tabs, **Up/Down** to
+select, **PgUp/PgDn** to page, and **[ / ]** to scroll long details. The **mouse wheel** scrolls
+the list or the details, whichever is under the cursor, without changing the selection. Like the
+PDA's Upgrades page, tab switches and selection changes play its UI sounds, and scrolling is
+silent.
+
+If another mod already uses the Archive tab, or `UseArchiveTab = false`, ZoneCodex leaves the tab
+alone and logs why. **Ctrl+E** then opens the codex as an overlay over the open PDA, and pressing
+it again or closing the PDA closes it. The overlay is keyboard-only, so it never blocks PDA clicks.
+Ctrl+E avoids function keys, which are awkward over Remote Desktop.
+
+Everything shown is generated from the game's own data, with no hand-written text:
+
+- Artifacts and consumables come from `ItemPrototypes.cfg`, after inheritance is resolved. Each
+  shows its localized name, description, anomaly, and inventory icon, plus the visible effects
+  from `EffectPrototypes.cfg`. Effect names come from localization.
+- Mutants use the PDA statistics names, and each is linked to its trophy item and its icon. Their
+  pictures are the statistics renders from `ObjPrototypes.cfg`. The jaded chimera's and the
+  amok's (the DLC's `Object68`) aren't referenced in the decoded data, so they are mapped by hand.
+- Factions lead with their lore, then their starting standing toward the player and their stance
+  toward each other faction from `RelationPrototypes.cfg`. The game has no faction descriptions,
+  so the lore is a curated list of the game's own loading-screen tips and location descriptions
+  that describe each faction. No web or fan text is used; GSC's site has no per-faction lore.
+  Badges come from the game's `FactionIconsDataTable`, which the build exports on first run.
+- There is no Field Guide tab; the PDA's own **Tutorial** tab already has those notes.
+
+All game text follows the game's language. The generator writes localization keys plus English
+fallbacks, and in game ZoneCodex looks each key up in the current language, re-resolving when the
+language changes. `UE4SS.log` reports it as `text language <culture>: N game strings, M English
+fallbacks`. ZoneCodex's own labels (tab titles, "Starting standing", controls) stay in English.
+
+Tracked tabs show what you **carry right now** in the active save: "Carried xN" on the list row,
+"Carried now" in the detail, and "carrying X of N" in the bottom bar. Counts come from
+`CppMediator.GetItemsCountInInventory`, refresh every `RefreshSeconds`, and refresh again
+whenever you switch tabs.
+
+```powershell
+.\shared\scripts\extract-gamedata.ps1          # once per game update: decoded cfgs + Game.en.csv
+.\mods\zonecodex\scripts\build-zonecodex.ps1   # -> build\zonecodex\codex_data.lua (ignored)
+.\mods\zonecodex\scripts\deploy-zonecodex.ps1  # game closed; needs UE4SS already installed
+.\mods\zonecodex\scripts\deploy-zonecodex.ps1 -Remove
+```
+
+`codex_data.lua` contains vanilla text, so it is regenerated locally and never committed.
+Deploy copies only `ue4ss\Mods\ZoneCodex`; it does not touch UE4SS, its signatures, or other
+mods. Settings live in `ue4ss\ZoneCodex\Scripts\config.lua`:
+
+- `UseArchiveTab`: use the PDA's Archive tab; `false` uses only the overlay.
+- `Key` and `Modifier`: the overlay toggle, default `E` and `CONTROL`. Set `Modifier = ""` for a
+  bare key.
+- `RequirePda`: the overlay only opens while the PDA is shown.
+- `Sounds`: play the Upgrades page's tab and selection sounds on the Archive tab.
+- `ArchiveRows`, `ArchiveDetailColumns`: the Archive tab's list rows and detail wrap width.
+  `ArchiveDetailLines` is the detail height only if the scroll panel can't be built.
+- `VisibleRows`, `LineHeight`, `DetailColumns`: the overlay's list and detail height, line
+  spacing, and detail wrap width.
+- `RefreshSeconds`: how often carried counts refresh.
+
+Known limits:
+
+- Counts cover only what you are carrying. Stash contents, items found earlier, collection
+  progress, and live reputation are not available from this API. Faction standings are the
+  game-start values.
+- Anomaly prototypes have no localized names, so there is no anomaly tab. Anomalies appear as
+  artifact facts. Factions have no localized descriptions, hence the curated lore.
+- The codex lists everything in the game data, including spoilers.
+- The game re-collapses the Archive button at times, so ZoneCodex re-shows it each poll.
+- The Archive layout uses fixed Upgrades-page measurements. If the list runs past the bottom of
+  the PDA at your resolution, lower `ArchiveRows`; if detail text runs off the right edge, lower
+  `ArchiveDetailColumns`.
+- Only one mod can use the Archive tab. ZoneCodex backs off if the button is already shown or
+  the page already has content. A mod that fills the page *after* ZoneCodex will overlap it; set
+  `UseArchiveTab = false` and use Ctrl+E instead.
+- The arrow keys and mouse clicks still reach the game as well. The overlay's font size and line
+  height are estimates; if its text clips, lower `DetailColumns` or `VisibleRows`, or raise
+  `LineHeight`.
+
+Credits: other mods showed that the PDA's hidden Archive slot can host a mod tab, and those
+"Live PDA Tab" mods inspired this approach:
+
+- [Faction Relations - Live PDA Tab](https://www.nexusmods.com/stalker2heartofchornobyl/mods/2557)
+- [Zone Messages - Live PDA Tab](https://www.nexusmods.com/stalker2heartofchornobyl/mods/3368)
+  by Danyo 123
+- [Zone Ranking - Live PDA Tab](https://www.nexusmods.com/stalker2heartofchornobyl/mods/3156)
+
+ZoneCodex shares no code with them. It is built on [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS)
+(MIT). PDA widget layouts were inspected with [CUE4Parse](https://github.com/FabianFG/CUE4Parse)
+and [FModel](https://github.com/4sval/FModel).
+
 ## QuestStash - quest items in personal stashes
 
 This separate native ASI prototype restores only the game's transfer actions for protected,

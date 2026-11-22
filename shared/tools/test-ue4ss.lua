@@ -1,5 +1,10 @@
 local root = arg[1] or "Gaming/stalker-2"
-local modFolders = { MolotovFire = "molotov-cocktail", ZoneAtlas = "zoneatlas", ZoneXM = "zonexm" }
+local modFolders = {
+    MolotovFire = "molotov-cocktail",
+    ZoneAtlas = "zoneatlas",
+    ZoneCodex = "zonecodex",
+    ZoneXM = "zonexm",
+}
 local nativeOpen = io.open
 
 local function loadMod(name, exports, configure)
@@ -41,11 +46,24 @@ local function loadMod(name, exports, configure)
         RegisterHook = function() end,
         RegisterKeyBind = function(key, callbackOrModifiers, modifierCallback)
             local callback = modifierCallback or callbackOrModifiers
-            if key then state.bindings[modifierCallback and ("SHIFT+" .. key) or key] = callback end
+            if key then state.bindings[modifierCallback and (callbackOrModifiers[1] .. "+" .. key) or key] = callback end
             if key == "LEFT_MOUSE_BUTTON" then state.click = callback end
         end,
-        Key = { F6 = "F6", LEFT_MOUSE_BUTTON = "LEFT_MOUSE_BUTTON" },
-        ModifierKey = { SHIFT = "SHIFT" },
+        Key = {
+            DOWN_ARROW = "DOWN_ARROW",
+            E = "E",
+            F6 = "F6",
+            F7 = "F7",
+            LEFT_ARROW = "LEFT_ARROW",
+            LEFT_MOUSE_BUTTON = "LEFT_MOUSE_BUTTON",
+            OEM_FOUR = "OEM_FOUR",
+            OEM_SIX = "OEM_SIX",
+            PAGE_DOWN = "PAGE_DOWN",
+            PAGE_UP = "PAGE_UP",
+            RIGHT_ARROW = "RIGHT_ARROW",
+            UP_ARROW = "UP_ARROW",
+        },
+        ModifierKey = { CONTROL = "CONTROL", SHIFT = "SHIFT" },
         LoopAsync = forbidden,
         ExecuteWithDelay = forbidden,
         ExecuteAsync = forbidden,
@@ -1359,3 +1377,690 @@ local sensorLogCount = #sensorState.logs
 sensorState:run(sensorState.timers[1].callback)
 assert(#sensorState.logs == sensorLogCount and sensorState.violations == 0, "Absent player was treated as a radar error")
 print("PASS: module isolation, snapshot close errors, failed flag-write retries, heartbeat cadence and clearing")
+
+local codexIcon = "/Game/GameLite/FPS_Game/UIRemaster/UITextures/Inventory/Artifacts/Art.Art"
+local codexData = {
+    fallbacks = {
+        sid_lore_freedom = "English lore",
+        sid_misc_Faction_Enemy_Name = "Enemy",
+        sid_misc_answer_faction_Duty = "Duty",
+        sid_misc_answer_faction_Freedom = "Freedom",
+    },
+    tabs = {
+        {
+            bulletsTitle = "Effects",
+            entries = {},
+            id = "artifacts",
+            title = "Artifacts",
+            tracksInventory = true,
+        },
+        {
+            bulletsTitle = "Stance toward others",
+            descriptionFirst = true,
+            entries = {
+                {
+                    bullets = { "{sid_misc_answer_faction_Duty}: {sid_misc_Faction_Enemy_Name}", "Monolith: Enemy of everyone" },
+                    -- sid_lore_gone has neither game text nor a fallback, so its paragraph drops out.
+                    description = "{sid_lore_freedom}\n\n{sid_lore_gone}",
+                    facts = { { "Starting standing", "{sid_misc_Faction_Enemy_Name}" } },
+                    icon = codexIcon,
+                    id = "Freedom",
+                    name = "{sid_misc_answer_faction_Freedom}",
+                    sids = {},
+                },
+            },
+            id = "factions",
+            maskIcons = true,
+            title = "Factions",
+            tracksInventory = false,
+        },
+    },
+}
+
+for index = 1, 8 do
+    codexData.tabs[1].entries[index] = {
+        bullets = { "Radiation +" .. index },
+        description = "The quick brown fox jumps over the lazy dog near the old Zone checkpoint.",
+        facts = { { "Anomaly", "Thermal" } },
+        icon = index == 2 and "/Game/Missing.Missing" or codexIcon,
+        id = "Art" .. index,
+        -- Artifact 1 stands in for a mutant: a large render beside the text, its part in the header.
+        detailIcon = index == 1 and codexIcon or nil,
+        image = index == 1 and codexIcon or nil,
+        name = "Artifact " .. index,
+        sids = { "Art" .. index },
+    }
+end
+
+codexData.tabs[1].entries[9] = { id = "broken" }
+
+local function codexFixture(config, archiveState, options)
+    options = options or {}
+
+    return loadMod("ZoneCodex", "", function(state)
+        local function object(name)
+            return {
+                IsHovered = function(self) return self.hovered == true end,
+                IsValid = function(self)
+                    if not state.onGameThread then state.violations = state.violations + 1 end
+                    return not self.destroyed
+                end,
+                GetFullName = function() return name end,
+                RemoveFromParent = function(self)
+                    self.removed = true
+                    local siblings = self.parent and self.parent.children or {}
+                    for index = #siblings, 1, -1 do
+                        if siblings[index] == self then table.remove(siblings, index) end
+                    end
+                end,
+                SetVisibility = function(self, value) self.visibility = value end,
+            }
+        end
+
+        local function widget()
+            local result = object("W_Text_C")
+            result.CommonTextObj = result
+            result.TextSettings = {}
+            result.AddToViewport = function(self, layer) self.layer = layer end
+            result.SetAlignmentInViewport = function() end
+            result.SetAnchorsInViewport = function() end
+            result.SetAutoWrapText = function(self, value) self.autoWrap = value end
+            result.SetClipping = function(self, value) self.clipping = value end
+            result.SetColorAndOpacity = function() end
+            result.SetDesiredSizeInViewport = function(self, value) self.size = value end
+            result.SetJustification = function() end
+            result.SetPositionInViewport = function(self, value) self.position = value end
+            result.SetShadowColorAndOpacity = function() end
+            result.SetShadowOffset = function() end
+            result.SetText = function(self, text) self.text = text end
+            return result
+        end
+
+        local function texture(width, height)
+            local result = object("Texture2D")
+            result.Blueprint_GetSizeX = function() return width end
+            result.Blueprint_GetSizeY = function() return height end
+            return result
+        end
+
+        -- Vanilla W_PDABookView_C: collapsed, disabled Archive button and an "In Progress" page.
+        function state.makeBook(path)
+            local book = object("W_PDABookView_C " .. path)
+            book.IsInViewport = function() return state.pdaVisible end
+            book.IsVisible = function() return state.pdaVisible end
+
+            local button = object("W_PDANavPanelSlot_C BestiaryBtn")
+            button.enabled, button.visibility = false, archiveState == "button" and 0 or 1
+            button.GetIsEnabled = function(self) return self.enabled end
+            button.GetVisibility = function(self) return self.visibility end
+            button.SetIsEnabled = function(self, value) self.enabled = value end
+
+            local root = object("Overlay_25")
+            root.children = { object("TextBlock_45") }
+            root.AddChildToOverlay = function(self, child)
+                self.children[#self.children + 1] = child
+                child.parent = self
+                child.slot = {
+                    SetHorizontalAlignment = function(slot, value) slot.horizontal = value end,
+                    SetPadding = function(slot, value) slot.padding = value end,
+                    SetVerticalAlignment = function(slot, value) slot.vertical = value end,
+                }
+                return child.slot
+            end
+            root.GetChildAt = function(self, index) return self.children[index + 1] end
+            root.GetChildrenCount = function(self) return #self.children end
+
+            if archiveState == "page" then root.children[2] = object("ForeignWidget") end
+
+            local page = object("W_BestiaryPage_C")
+            page.WidgetTree = { RootWidget = root }
+
+            local switcher = object("Switcher")
+            switcher.GetActiveWidgetIndex = function() return state.activePage end
+            switcher.GetChildIndex = function(_, child) return child == page and 6 or -1 end
+
+            book.BestiaryPage, book.Switcher = page, switcher
+            book.NavigationPanel = { BestiaryBtn = button }
+            book.button, book.placeholder, book.root = button, root.children[1], root
+            return book
+        end
+
+        state.activePage, state.countReads, state.created, state.images, state.inventory = 0, 0, {}, {}, { Art2 = 3 }
+        state.findCount, state.now, state.pdaVisible, state.sounds = 0, 100, false, {}
+        state.culture = "uk"
+        state.localized = { sid_lore_freedom = "<b>Freedom</b> fights for the Zone.", sid_misc_answer_faction_Freedom = "Svoboda" }
+        state.book = state.makeBook("/Game/PDA")
+        state.controller = object("PlayerController")
+        state.controller.Pawn = object("Pawn")
+        state.controller.Pawn.K2_GetActorLocation = function() return { X = 1, Y = 2, Z = 3 } end
+        state.env.FName = function(value) return { ToString = function() return value end } end
+        state.env.FText = function(text) return text end
+        state.env.NotifyOnNewObject = function(class, callback)
+            assert(class == "/Script/Stalker2.PDAView")
+            state.notify = callback
+        end
+        state.env.os = { time = function() return state.now end }
+        state.env.loadfile = function(path)
+            if path:find("config.lua", 1, true) then return function() return config end end
+            if path:find("codex_data.lua", 1, true) then return function() return codexData end end
+            error("Unexpected loadfile " .. path)
+        end
+
+        local defaultBook = object("W_PDABookView_C Default__W_PDABookView_C")
+        state.env.FindAllOf = function(class)
+            if not state.onGameThread then state.violations = state.violations + 1 end
+            if class == "W_PDABookView_C" then
+                state.findCount = state.findCount + 1
+                return { defaultBook, state.book }
+            end
+            return nil
+        end
+
+        local mediator = object("Default__CppMediator")
+        mediator.GetItemsCountInInventory = function(_, pawn, sid)
+            assert(pawn == state.controller.Pawn, "Counts were not read for the player pawn")
+            state.countReads = state.countReads + 1
+            if state.countFailure then return nil end
+            return state.inventory[sid] or 0
+        end
+        local library = object("WidgetLibrary")
+        library.Create = function()
+            local created = widget()
+            state.created[#state.created + 1] = created
+            return created
+        end
+        local layout = object("LayoutLibrary")
+        layout.GetViewportScale = function() return 2 end
+        layout.GetViewportSize = function() return { X = 3840, Y = 2160 } end
+        layout.GetMousePositionOnPlatform = function() return { X = 300, Y = 200 } end
+        local textLibrary = object("Default__KismetTextLibrary")
+        textLibrary.FindTextInLocalizationTable = function(_, namespace, key, outText, source)
+            assert(state.onGameThread and namespace == "ST_S2BaseGameLocalization" and source == "")
+            local text = state.localized[key]
+            if not text then return false end
+            outText.OutText = { ToString = function() return text end }
+            return true
+        end
+        local internationalization = object("Default__KismetInternationalizationLibrary")
+        internationalization.GetCurrentCulture = function() return state.culture end
+        local imageClass = object("Image")
+        local scrollBoxClass = object("ScrollBox")
+        local sizeBoxClass = object("SizeBox")
+        local spacerClass = object("Spacer")
+        local textClass = object("W_Text_C")
+        local akStatics = object("Default__AkGameplayStatics")
+        akStatics.PostEventAtLocation = function(_, event, location, orientation, context)
+            assert(state.onGameThread, "Sound posted outside the game thread")
+            assert(location.Z == 3 and orientation.Yaw == 0 and context == state.controller.Pawn, "Sound was not posted at the player")
+            state.sounds[#state.sounds + 1] = event:GetFullName():match("([^.]+)$")
+            return 1
+        end
+        state.wheels = {}
+
+        local function panel(name)
+            local result = object(name)
+            result.children = {}
+            result.AddChild = function(self, child)
+                self.children[#self.children + 1] = child
+                child.parent = self
+                child.slot = {
+                    SetHorizontalAlignment = function(slot, value) slot.horizontal = value end,
+                    SetVerticalAlignment = function(slot, value) slot.vertical = value end,
+                }
+                return child.slot
+            end
+            return result
+        end
+
+        if not options.noImages then
+            state.env.StaticConstructObject = function(class, outer)
+                assert(outer.RootWidget, "Widgets must be owned by the page's widget tree")
+                if class == scrollBoxClass then
+                    local function brush() return { DrawAs = 2, TintColor = { SpecifiedColor = { R = 1, G = 1, B = 1, A = 1 } } } end
+                    local result = panel("ScrollBox")
+                    result.offset = 0
+                    result.GetScrollOffset = function(self) return self.offset end
+                    result.GetScrollOffsetOfEnd = function() return 300 end
+                    result.ScrollToStart = function(self) self.offset = 0 end
+                    result.SetScrollBarVisibility = function(self, value) self.scrollBarVisibility = value end
+                    result.SetScrollbarThickness = function(self, value) self.thickness = value end
+                    result.SetScrollOffset = function(self, value) self.offset = value end
+                    result.WidgetBarStyle = {
+                        DraggedThumbImage = brush(),
+                        HoveredThumbImage = brush(),
+                        NormalThumbImage = brush(),
+                        VerticalBackgroundImage = brush(),
+                    }
+                    result.WidgetStyle = { BottomShadowBrush = brush(), TopShadowBrush = brush() }
+                    state.wheels[#state.wheels + 1] = result
+                    return result
+                elseif class == sizeBoxClass then
+                    local result = panel("SizeBox")
+                    result.SetHeightOverride = function(self, value) self.height = value end
+                    result.SetMaxDesiredHeight = function(self, value) self.maxHeight = value end
+                    result.SetWidthOverride = function(self, value) self.width = value end
+                    return result
+                elseif class == spacerClass then
+                    local result = object("Spacer")
+                    result.SetSize = function(self, value) self.size = value end
+                    return result
+                end
+                assert(class == imageClass, "Unexpected widget class")
+                local result = object("Image")
+                result.SetBrushResourceObject = function(self, value) self.brush = value end
+                result.SetColorAndOpacity = function(self, value) self.color = value end
+                result.SetRenderScale = function(self, value) self.renderScale = value end
+                -- The game's UImage has no SetBrushSize; the size lives in the Brush struct.
+                result.Brush = { ImageSize = { X = 32, Y = 32 } }
+                result.SetDesiredSizeOverride = function() end
+                state.images[#state.images + 1] = result
+                return result
+            end
+        end
+
+        state.env.LoadAsset = function(path)
+            assert(state.onGameThread, "LoadAsset outside the game thread")
+            return path == codexIcon and texture(64, 32) or nil
+        end
+        state.env.StaticFindObject = function(path)
+            if not state.onGameThread then state.violations = state.violations + 1 end
+            if path == "/Script/Stalker2.Default__CppMediator" then return mediator end
+            if path == "/Script/UMG.Default__WidgetBlueprintLibrary" then return library end
+            if path == "/Script/UMG.Default__WidgetLayoutLibrary" then return layout end
+            if path == "/Script/UMG.Image" then return imageClass end
+            if path == "/Script/UMG.ScrollBox" then return scrollBoxClass end
+            if path == "/Script/UMG.SizeBox" then return sizeBoxClass end
+            if path == "/Script/UMG.Spacer" then return spacerClass end
+            if path == "/Game/GameLite/FPS_Game/UIRemaster/CommonWidgets/W_Text.W_Text_C" then return textClass end
+            if path == "/Script/AkAudio.Default__AkGameplayStatics" then return akStatics end
+            if path == "/Script/Engine.Default__KismetTextLibrary" then return textLibrary end
+            if path == "/Script/Engine.Default__KismetInternationalizationLibrary" then return internationalization end
+            if path:find("^/Game/_STALKER2/Audio/WwiseAudio/Events/UI/PDA/") then return object(path) end
+            if path:find("^/Game/GameLite/FPS_Game/UIRemaster/UITextures/PDA/") then return texture(32, 32) end
+            return nil
+        end
+    end)
+end
+
+local function codexLogCount(state, text)
+    local count = 0
+
+    for _, message in ipairs(state.logs) do
+        if message:find(text, 1, true) then count = count + 1 end
+    end
+
+    return count
+end
+
+local function codexLogged(state, text)
+    return codexLogCount(state, text) > 0
+end
+
+-- Fallback widgets are created as header, detail, one per tab, then one per visible row.
+local function codexWidgets(state, first)
+    first = first or 1
+    local created = state.created
+    return {
+        detail = created[first + 1],
+        header = created[first],
+        rows = { table.unpack(created, first + 4, first + 9) },
+        tabs = { created[first + 2], created[first + 3] },
+    }
+end
+
+-- Archive texts: selected + idle label per tab, name + subtitle per row, title, subtitle, body,
+-- status, controls.
+-- Archive images: 7 frame pieces, left cap + middle + right cap per tab, hover + selected + icon
+-- per row, icon box, icon, divider, picture.
+local function codexPageWidgets(state, firstText, firstImage)
+    local texts, images = state.created, state.images
+    local page = { rows = {}, tabs = {} }
+
+    for index = 1, 2 do
+        local label, cap = firstText + 2 * (index - 1), firstImage + 4 + 3 * index
+        page.tabs[index] = {
+            background = images[cap + 1],
+            idleLabel = texts[label + 1],
+            label = texts[label],
+            leftCap = images[cap],
+            rightCap = images[cap + 2],
+        }
+    end
+
+    for row = 1, 6 do
+        local text, image = firstText + 2 + 2 * row, firstImage + 10 + 3 * row
+        page.rows[row] = { hover = images[image], icon = images[image + 2], name = texts[text], selected = images[image + 1], subtitle = texts[text + 1] }
+    end
+
+    page.title, page.subtitle, page.body = texts[firstText + 16], texts[firstText + 17], texts[firstText + 18]
+    page.status, page.controls = texts[firstText + 19], texts[firstText + 20]
+    page.iconBox, page.icon, page.divider = images[firstImage + 31], images[firstImage + 32], images[firstImage + 33]
+    page.picture = images[firstImage + 34]
+    return page
+end
+
+-- Selected tabs use W_PDAUpgradesButton's light ButtonCollorDisable, in linear colour.
+local function isSelectedTab(tab)
+    local tinted = tab.background.color.R > 0.5 and tab.leftCap.color.R > 0.5 and tab.rightCap.color.R > 0.5
+    return tinted and tab.label.visibility == 3 and tab.idleLabel.visibility == 1
+end
+
+local function isIdleTab(tab)
+    local tinted = tab.background.color.R < 0.05 and tab.leftCap.color.R < 0.05 and tab.rightCap.color.R < 0.05
+    return tinted and tab.label.visibility == 1 and tab.idleLabel.visibility == 3
+end
+
+local function takeSounds(state)
+    local sounds = table.concat(state.sounds, ",")
+    state.sounds = {}
+    return sounds
+end
+
+local codex = codexFixture({ ArchiveDetailColumns = 24, ArchiveDetailLines = 6, ArchiveRows = 6, DetailColumns = 24, VisibleRows = 6 })
+local function codexPoll() codex:run(codex.timers[1].callback) end
+local function codexPress(key, times)
+    for _ = 1, times or 1 do codex.bindings[key]() end
+end
+
+assert(#codex.timers == 1 and codex.timers[1].delay == 100)
+assert(codexLogged(codex, "2 tabs, 9 entries; PDA Archive tab, or Ctrl+E as a fallback"))
+assert(codexLogged(codex, "invalid codex entry Artifacts[9]"))
+assert(codex.bindings["CONTROL+E"] and codex.bindings.LEFT_MOUSE_BUTTON and not codex.bindings.E)
+codexPress("CONTROL+E")
+codexPress("DOWN_ARROW")
+codexPress("LEFT_MOUSE_BUTTON")
+assert(codex.violations == 0 and #codex.created == 0, "Key callbacks must only queue intents")
+codexPoll()
+assert(#codex.created == 0 and codexLogged(codex, "open the PDA first"), "Codex opened without a visible PDA")
+assert(codex.book.button.visibility == 1, "Archive button was shown while the PDA was closed")
+
+codex.pdaVisible = true
+codexPoll()
+assert(#codex.created == 21 and #codex.images == 35 and codexLogged(codex, "added to the PDA Archive tab"), "Codex did not claim the Archive tab")
+assert(codexLogged(codex, "text language uk: "), "Codex text was not localized on the game thread")
+local codexPage = codexPageWidgets(codex, 1, 1)
+assert(#codex.book.root.children == 63 and codex.book.placeholder.visibility == 1, "Placeholder was not replaced")
+assert(codex.book.button.visibility == 0 and codex.book.button.enabled == true, "Archive button was not shown")
+assert(codexPage.tabs[1].label.text == "Artifacts" and codexPage.tabs[1].label.TextSettings.FontStyleId:ToString() == "PDACurrQuestBtn")
+assert(codexPage.tabs[1].idleLabel.text == "Artifacts" and codexPage.tabs[1].idleLabel.TextSettings.FontStyleId:ToString() == "PDAQuestDetails")
+assert(codexPage.title.TextSettings.FontStyleId:ToString() == "PDAQuestDetailsNameMain" and codexPage.title.bEnableStyleManager == true)
+assert(codexPage.tabs[1].background.visibility == 0 and codexPage.tabs[1].label.visibility == 3, "Tab backgrounds must take the clicks")
+assert(codexPage.rows[1].hover.visibility == 3 and codexPage.rows[1].name.visibility == 3, "Row wheel catchers must take the clicks")
+-- Tabs are W_PDAUpgradesButton's rounded T_button_side caps around a tinted middle, label centred.
+assert(codexPage.tabs[2].leftCap.slot.padding.Left == 264 and codexPage.tabs[2].leftCap.brush and codexPage.tabs[2].leftCap.Brush.ImageSize.X == 5)
+assert(codexPage.tabs[2].background.slot.padding.Left == 269 and codexPage.tabs[2].background.Brush.ImageSize.X == 222)
+assert(codexPage.tabs[2].rightCap.slot.padding.Left == 491 and codexPage.tabs[2].rightCap.renderScale.X == -1)
+local codexTabBox = codexPage.tabs[2].label.parent
+assert(codexTabBox.width == 232 and codexTabBox.height == 50 and codexTabBox.slot.padding.Left == 264 and codexTabBox.visibility == 4)
+assert(codexPage.tabs[2].label.slot.horizontal == 2 and codexPage.tabs[2].label.slot.vertical == 2, "Tab labels were not centred")
+assert(codexPage.rows[2].hover.slot.padding.Top == 162 and codexPage.rows[2].name.slot.padding.Top == 166 and codexPage.rows[2].name.slot.padding.Left == 94)
+assert(codexPage.divider.brush and codexPage.divider.slot.horizontal == 0 and codexPage.body.clipping == 1 and codexPage.body.autoWrap == true)
+-- The body scrolls in a W_PDANotesDetails-style ScrollBox: thin flat thumb, no edge shadows.
+local codexDetailScroll = codex.wheels[7]
+assert(codexPage.body.parent == codexDetailScroll and codexDetailScroll.visibility == 0 and codexDetailScroll.ConsumeMouseWheel == 1)
+assert(codexDetailScroll.parent.width == 700 and codexDetailScroll.parent.maxHeight == 1 and codexDetailScroll.parent.slot.padding.Left == 544)
+assert(codexDetailScroll.AllowOverscroll == false and codexDetailScroll.thickness.X == 3)
+assert(codexDetailScroll.WidgetBarStyle.NormalThumbImage.DrawAs == 3 and codexDetailScroll.WidgetBarStyle.NormalThumbImage.TintColor.SpecifiedColor.A == 0.5)
+assert(codexDetailScroll.WidgetBarStyle.DraggedThumbImage.TintColor.SpecifiedColor.A == 1 and codexDetailScroll.WidgetStyle.TopShadowBrush.DrawAs == 0)
+assert(codexPage.picture.visibility == 1, "The picture showed before any entry")
+assert(codexPage.title.text == nil and codex.countReads == 0, "Codex rendered while its tab was inactive")
+assert(codexPage.title.layer == nil, "Archive widgets were added to the viewport")
+
+codex.book.button.visibility, codex.book.button.enabled = 1, false
+codexPoll()
+assert(codex.book.button.visibility == 0 and codex.book.button.enabled == true, "Archive button was not re-shown")
+codexPress("DOWN_ARROW")
+codexPoll()
+assert(codexPage.title.text == nil, "Navigation acted while the Archive tab was inactive")
+
+codex.activePage = 6
+codexPoll()
+assert(codexPage.status.text == "Artifacts     1-6 of 8   |   carrying 1 of 8" and codexPage.controls.text:find("Q/E: PDA pages", 1, true))
+assert(isSelectedTab(codexPage.tabs[1]) and isIdleTab(codexPage.tabs[2]), "Tabs were not styled like the Upgrades buttons")
+assert(takeSounds(codex) == "", "Opening the Archive tab played a navigation sound")
+assert(codexPage.rows[1].name.text == "Artifact 1" and codexPage.rows[1].subtitle.text == "Thermal")
+assert(codexPage.rows[2].subtitle.text == "Carried x3  |  Thermal")
+assert(codexPage.rows[1].selected.visibility == 3 and codexPage.rows[2].selected.visibility == 1)
+assert(codexPage.title.text == "Artifact 1" and codexPage.subtitle.text == "Artifacts")
+assert(codexPage.body.text:find("^Anomaly: Thermal\nCarried now: 0\n\nEffects:\n%- Radiation %+1\n") and not codexPage.body.text:find("for more", 1, true), "The scroll panel did not take the whole body")
+assert(codexPage.controls.text == "Click, wheel or arrows: browse     PgUp/PgDn: page     Q/E: PDA pages")
+assert(codexPage.picture.visibility == 3 and codexPage.picture.Brush.ImageSize.X == 520 and codexPage.picture.Brush.ImageSize.Y == 260)
+assert(codexPage.picture.slot.padding.Left == 1268 and codexPage.picture.slot.padding.Top == 220, "The picture did not sit beside the text")
+assert(codexDetailScroll.parent.slot.padding.Top == 185 and codexPage.icon.color.R == 1, "Unmasked icons were tinted")
+assert(codexPage.rows[1].icon.visibility == 3 and codexPage.rows[1].icon.Brush.ImageSize.X == 64 and codexPage.rows[1].icon.slot.padding.Top == 114)
+assert(codexPage.rows[2].icon.visibility == 1 and codexLogCount(codex, "texture unavailable: /Game/Missing.Missing") == 1)
+assert(codexPage.icon.Brush.ImageSize.X == 128 and codexPage.icon.Brush.ImageSize.Y == 64 and codexPage.icon.slot.padding.Top == 57)
+assert(codexPage.iconBox.visibility == 3 and codexPage.title.slot.padding.Left == 696, "Title did not make room for the icon")
+local codexReads = codex.countReads
+codexPoll()
+assert(codex.countReads == codexReads, "Counts were re-read before RefreshSeconds elapsed")
+
+local codexRowWheels = {}
+for row = 1, 6 do codexRowWheels[row] = codex.wheels[row] end
+assert(codexRowWheels[1].offset == 2000 and codexRowWheels[1].ConsumeMouseWheel == 1 and codexRowWheels[1].visibility == 0)
+assert(codexRowWheels[2].parent.width == 505 and codexRowWheels[2].parent.height == 64 and codexRowWheels[2].parent.slot.padding.Top == 162)
+codexRowWheels[3].offset = 2032
+codexPoll()
+assert(codexPage.status.text:find("3-8 of 8", 1, true) and codexPage.title.text == "Artifact 1", "Wheel did not scroll the list window")
+assert(codexRowWheels[3].offset == 2000, "Wheel catcher was not re-armed")
+assert(takeSounds(codex) == "", "List wheel played a sound; Upgrades scrolling is silent")
+codexRowWheels[1].offset = 0
+codexPoll()
+assert(codexPage.status.text:find("3-8 of 8", 1, true) and codexRowWheels[1].offset == 2000, "A layout reset was read as wheel input")
+assert(takeSounds(codex) == "", "A layout reset played a sound")
+-- The detail panel scrolls natively; refreshes of the same entry keep the reader's place.
+codexRowWheels[1].offset = 1968
+codexDetailScroll.offset = 120
+codexPoll()
+assert(codexPage.status.text:find("1-6 of 8", 1, true) and codexDetailScroll.offset == 120, "Wheel did not scroll back or the detail lost its place")
+assert(takeSounds(codex) == "", "Detail wheel played a sound; Upgrades scrolling is silent")
+
+codexPress("DOWN_ARROW", 6)
+codexPoll()
+assert(takeSounds(codex) == "SFX_UI_Upgrade_Switch", "Selection change did not play the Upgrades select sound once")
+assert(codexPage.status.text:find("2-7 of 8", 1, true) and codexPage.rows[1].name.text == "Artifact 2")
+assert(codexPage.rows[6].selected.visibility == 3 and codexPage.rows[1].selected.visibility == 1 and codexPage.title.text == "Artifact 7")
+codexPress("PAGE_DOWN")
+codexPoll()
+assert(codexPage.status.text:find("3-8 of 8", 1, true) and codexPage.rows[6].name.text == "Artifact 8")
+codexPress("PAGE_UP")
+codexPoll()
+assert(codexPage.status.text:find("2-7 of 8", 1, true) and codexPage.body.text:find("Carried now: 3", 1, true))
+assert(codexPage.subtitle.text == "Artifacts  |  Carried: 3" and codexPage.iconBox.visibility == 1)
+assert(codexPage.title.slot.padding.Left == 544, "Title kept the icon gap for an entry without an icon")
+assert(codexPage.picture.visibility == 1, "An entry without a render kept the last picture")
+assert(codexLogCount(codex, "texture unavailable: /Game/Missing.Missing") == 1, "A missing texture was retried")
+
+-- Slate marks the whole hit path hovered, so the catcher's SizeBox alone also counts.
+codexRowWheels[3].parent.hovered = true
+codexPoll()
+assert(codexPage.rows[3].hover.color.A == 0.6, "Hovered row was not highlighted")
+codexPress("LEFT_MOUSE_BUTTON")
+codexPoll()
+codexRowWheels[3].parent.hovered = false
+codexPoll()
+assert(codexPage.title.text == "Artifact 4" and codexPage.rows[3].selected.visibility == 3, "Row click did not select")
+assert(codexPage.rows[3].hover.color.A == 0, "Row highlight outlived the hover")
+codexPress("LEFT_MOUSE_BUTTON")
+codexPoll()
+assert(codexPage.title.text == "Artifact 4", "A click outside the codex changed the selection")
+codexRowWheels[2].hovered = true
+codexPoll()
+codexRowWheels[2].hovered = false
+codexPress("LEFT_MOUSE_BUTTON")
+codexPoll()
+assert(codexPage.title.text == "Artifact 3", "A press that cleared the hover lost the click")
+codexRowWheels[3].hovered = true
+codexPoll()
+codexRowWheels[3].hovered = false
+codex.activePage = 2
+codexPoll()
+codex.activePage = 6
+codexPress("LEFT_MOUSE_BUTTON")
+codexPoll()
+assert(codexPage.title.text == "Artifact 3", "A hover from before leaving the Archive tab caught a later click")
+assert(codexLogged(codex, "click matched no tab or row (cursor 300,200; hover root=0 detail=0 tabs=00 rowWheels=000000 rowBoxes=000000 rowImages=000000)"), "A missed click was not logged with its hover report")
+codexPress("DOWN_ARROW", 3)
+codexPress("UP_ARROW", 2)
+
+codexDetailScroll.offset = 90
+codexPress("UP_ARROW", 3)
+codexPoll()
+assert(codexPage.title.text == "Artifact 1" and codexDetailScroll.offset == 0, "A new entry did not start at the top")
+codexPress("OEM_SIX")
+codexPoll()
+assert(codexDetailScroll.offset == 240 and codexPage.body.text:find("^Anomaly: Thermal\n"), "] did not scroll the panel")
+codexPress("OEM_SIX")
+codexPoll()
+assert(codexDetailScroll.offset == 300, "] scrolled past the end")
+codexPress("OEM_FOUR")
+codexPoll()
+assert(codexDetailScroll.offset == 60, "[ did not scroll back")
+takeSounds(codex)
+
+codexPage.tabs[2].background.hovered = true
+codexPress("LEFT_MOUSE_BUTTON")
+codexReads = codex.countReads
+codexPoll()
+codexPage.tabs[2].background.hovered = false
+assert(isSelectedTab(codexPage.tabs[2]) and isIdleTab(codexPage.tabs[1]), "Tab click did not switch")
+assert(takeSounds(codex) == "SFX_PDA_JournalTabSwitch", "Tab click did not play only the tab switch sound")
+assert(codexPage.status.text == "Factions     1-1 of 1" and codex.countReads == codexReads)
+assert(codexPage.body.text == "Freedom fights for the\nZone.\n\nStarting standing: Enemy\n\nStance toward others:\n- Duty: Enemy\n- Monolith: Enemy of\n  everyone", "Lore did not lead the faction detail")
+assert(codexPage.title.text == "Svoboda" and codexPage.rows[1].name.text == "Svoboda", "Faction name was not localized")
+assert(codexPage.rows[2].name.text == "" and codexPage.rows[2].subtitle.text == "")
+-- Faction badges are white masks, tinted like the game's own badge art.
+assert(codexPage.rows[1].icon.visibility == 3 and codexPage.rows[1].icon.color.R < 1 and codexPage.icon.color.R < 1, "Badges were not tinted")
+assert(codexPage.iconBox.visibility == 3 and codexPage.picture.visibility == 1)
+codexRowWheels[2].hovered = true
+codexPoll()
+codexRowWheels[2].hovered = false
+assert(codexPage.rows[2].hover.color.A == 0, "An empty row was highlighted")
+codexPress("RIGHT_ARROW")
+codex.inventory.Art1 = 1
+codexPoll()
+assert(isSelectedTab(codexPage.tabs[1]) and codexPage.rows[1].subtitle.text == "Carried x1  |  Thermal")
+codex.inventory.Art1 = 2
+codex.now = codex.now + 1
+codexPoll()
+assert(codexPage.rows[1].subtitle.text == "Carried x1  |  Thermal", "Counts refreshed before RefreshSeconds")
+codex.now = codex.now + 1
+codexPoll()
+assert(codexPage.rows[1].subtitle.text == "Carried x2  |  Thermal", "Counts did not refresh after RefreshSeconds")
+
+codex.countFailure = true
+codex.now = codex.now + 2
+codexPoll()
+assert(codexPage.status.text:find("carried counts unavailable", 1, true) and codexPage.body.text:find("Carried now: unknown", 1, true))
+assert(codexLogged(codex, "inventory ERROR: unexpected count for Art1: nil"))
+codex.countFailure = false
+codex.now = codex.now + 2
+codexPoll()
+assert(codexPage.status.text:find("carrying 2 of 8", 1, true), "Counts did not recover after a failed read")
+
+for index = #codex.logs, 1, -1 do
+    if codex.logs[index]:find("inventory ERROR", 1, true) then table.remove(codex.logs, index) end
+end
+
+codexPress("CONTROL+E")
+codexPoll()
+assert(#codex.created == 21 and codexLogged(codex, "Ctrl+E is only the fallback"), "Ctrl+E opened a second codex")
+codex.pdaVisible = false
+codexPoll()
+assert(not codexPage.title.removed, "Archive page widgets were removed when the PDA closed")
+
+codex.pdaVisible = true
+codex.created[5]:RemoveFromParent()
+codex.created[5].destroyed = true
+codexPoll()
+assert(codexPage.title.removed and codexPage.rows[1].hover.removed and codexLogCount(codex, "will re-add them") == 1)
+codex.now = codex.now + 1
+codexPoll()
+assert(#codex.created == 42 and #codex.book.root.children == 63, "Codex did not re-add destroyed Archive widgets")
+
+local oldBook = codex.book
+codex.book = codex.makeBook("/Game/PDA2")
+codex.notify(codex.book)
+oldBook.BestiaryPage.destroyed = true
+codexPoll()
+assert(codexLogCount(codex, "will re-add them") == 2, "Lost Archive page was not released")
+assert(#codex.created == 63 and #codex.images == 105 and #codex.book.root.children == 63, "Codex did not claim the new PDA's Archive tab")
+codex:check()
+
+local plainCodex = codexFixture({ ArchiveRows = 6, VisibleRows = 6 }, nil, { noImages = true })
+plainCodex.pdaVisible, plainCodex.activePage = true, 6
+plainCodex:run(plainCodex.timers[1].callback)
+assert(#plainCodex.created == 21 and #plainCodex.images == 0 and codexLogged(plainCodex, "Archive images unavailable"))
+assert(codexLogged(plainCodex, "centred labels unavailable") and plainCodex.created[1].slot.padding.Left == 18, "Labels did not fall back to a left inset")
+assert(plainCodex.created[1].visibility == 0 and plainCodex.created[2].visibility == 1, "Text-only tabs did not show only the selected label")
+assert(plainCodex.created[7].visibility == 0 and plainCodex.created[8].visibility == 3)
+plainCodex.created[7].hovered = true
+plainCodex.bindings.LEFT_MOUSE_BUTTON()
+plainCodex:run(plainCodex.timers[1].callback)
+assert(plainCodex.created[17].text == "Artifact 2", "Text-only rows did not take clicks")
+plainCodex:check()
+
+local foreignCodex = codexFixture({ VisibleRows = 6 }, "button")
+local function foreignPoll() foreignCodex:run(foreignCodex.timers[1].callback) end
+foreignCodex.pdaVisible = true
+foreignPoll()
+foreignPoll()
+assert(#foreignCodex.created == 0 and #foreignCodex.book.root.children == 1, "Codex took an Archive tab owned by another mod")
+assert(codexLogCount(foreignCodex, "already shown by another mod; ZoneCodex stays on Ctrl+E instead") == 1)
+foreignCodex.bindings["CONTROL+E"]()
+foreignPoll()
+local codexViewport = codexWidgets(foreignCodex)
+assert(#foreignCodex.created == 10 and codexViewport.header.layer == 1000, "Ctrl+E fallback did not open")
+assert(codexViewport.header.visibility == 4 and codexViewport.tabs[1].visibility == 4 and codexViewport.rows[1].visibility == 4)
+assert(codexViewport.header.position.X == 260 and codexViewport.header.position.Y == 424)
+assert(codexViewport.rows[1].position.X == 504 and codexViewport.rows[1].position.Y == 500 and codexViewport.rows[1].size.X == 400)
+assert(codexViewport.detail.position.X == 928 and codexViewport.header.text:find("Ctrl+E close", 1, true))
+assert(codexViewport.header.text:find("^ZONE CODEX   |   Artifacts   |   1%-6 of 8   |   carrying 1 of 8\n"))
+assert(codexViewport.tabs[1].text == "> Artifacts" and codexViewport.rows[2].text == "   Artifact 2  x3")
+assert(codexViewport.detail.text == "Artifact 1\n\nAnomaly: Thermal\nCarried now: 0\n\n...  ] for more")
+codexViewport.rows[2].hovered = true
+foreignCodex.bindings.LEFT_MOUSE_BUTTON()
+foreignPoll()
+assert(codexViewport.rows[1].text == "> Artifact 1", "Viewport fallback took a click")
+foreignCodex.bindings.DOWN_ARROW()
+foreignPoll()
+assert(codexViewport.rows[2].text == "> Artifact 2  x3", "Viewport fallback did not navigate")
+foreignCodex.pdaVisible = false
+foreignPoll()
+assert(codexViewport.header.removed and codexViewport.rows[6].removed and codexLogged(foreignCodex, "closed: PDA closed"))
+foreignCodex.pdaVisible = true
+foreignCodex.bindings["CONTROL+E"]()
+foreignPoll()
+assert(#foreignCodex.created == 20, "Fallback did not reopen")
+foreignCodex.created[15].destroyed = true
+foreignPoll()
+assert(codexLogged(foreignCodex, "codex widgets were destroyed"), "Destroyed widgets did not close the codex")
+foreignCodex.bindings["CONTROL+E"]()
+foreignPoll()
+assert(#foreignCodex.created == 30)
+foreignCodex.bindings["CONTROL+E"]()
+foreignPoll()
+assert(foreignCodex.created[21].removed and foreignCodex.created[30].removed, "Ctrl+E did not close the fallback")
+foreignCodex:check()
+
+local filledCodex = codexFixture({ VisibleRows = 6 }, "page")
+filledCodex.pdaVisible = true
+filledCodex:run(filledCodex.timers[1].callback)
+assert(#filledCodex.created == 0 and codexLogged(filledCodex, "Archive page already has content from another mod"))
+assert(filledCodex.book.button.visibility == 1, "Codex showed another mod's Archive button")
+filledCodex:check()
+
+local ungatedCodex = codexFixture({ Key = "NOT_A_KEY", Modifier = "hyper", RequirePda = false, UseArchiveTab = false, VisibleRows = 6 })
+assert(codexLogged(ungatedCodex, "unknown Key 'NOT_A_KEY'") and codexLogged(ungatedCodex, "unknown Modifier 'HYPER'"))
+ungatedCodex.bindings["CONTROL+E"]()
+ungatedCodex:run(ungatedCodex.timers[1].callback)
+assert(#ungatedCodex.created == 10 and ungatedCodex.created[1].layer == 1000, "Ungated fallback did not open")
+ungatedCodex.pdaVisible = true
+ungatedCodex:run(ungatedCodex.timers[1].callback)
+assert(#ungatedCodex.book.root.children == 1 and #ungatedCodex.created == 10, "UseArchiveTab = false still claimed the tab")
+ungatedCodex:check()
+
+local plainKeyCodex = codexFixture({ Modifier = "" })
+assert(plainKeyCodex.bindings.E and codexLogged(plainKeyCodex, "or E as a fallback"), "Empty Modifier did not bind the bare key")
+plainKeyCodex:check()
+print("PASS: ZoneCodex styles the PDA Archive tab like the Upgrades page, backs off from other Archive mods, handles clicks, hover and keys, and keeps a Ctrl+E fallback")

@@ -446,6 +446,115 @@ cooks (stale pak cache).
   key, so ZoneAtlas builds its own `W_HintImageKeyboard_C` and `W_Text_C`, then copies the brush
   and text style from a live hint.
 
+## PDA codex data (ZoneCodex)
+
+- `Game.en.csv` keys use the `ST_S2BaseGameLocalization/` prefix. The families used are:
+  - Items: `sid_items_<LocalizationSID>_name` and `_description`. Several prototypes can share
+    one `LocalizationSID`, for example `PArtifactBrain` → `GArtifactNightStar`.
+  - Effects: `sid_effects_<SID>_name`.
+  - Mutants: `sid_misc_statisticspack_pda_statictics_mutant_<id>`. The "statictics" typo is the
+    game's own.
+  - Faction lore (curated, `FACTION_LORE_KEYS` in `build_codex.py`): loading-screen tips
+    `sid_lscreen_Loading_screen_<NN>_desc`, location blurbs `sid_locations_{region|hub}_<id>_desc`,
+    and for Scientists `sid_lscreen_advicespack_Loading_screen_<NN>_desc`.
+  - Factions: `sid_misc_answer_faction_<Id>`.
+  - Relation labels: `sid_misc_Faction_{Enemy|Dislike|Neutral|Friend}_Name`.
+- Mutant trophies are `EItemType::MutantLoot` with `LocalizationSID = mutpartspack_MutantPart<X>`.
+  Match them to the statistics ids by that suffix or by the SID minus `Loot`. Mouldy blind dog,
+  rat, and shadow chimera have no trophy.
+- The amok is the DLC's `Object68`: `Statistics.cfg` `MutantsSID` lists it in the amok's slot, and
+  its render is `Stats/Mutants/big/T_Object68_statisticbig`. Its prototypes, including the "Hand of
+  Amok" trophy (`sid_items_DLC01_object68hand_*`), are DLC data that `extract-gamedata.ps1`
+  doesn't decode, so the codex can't link that trophy yet.
+- `RelationPrototypes.cfg` `Default` holds:
+  - a child → parent `Factions` hierarchy;
+  - symmetric `A<->B = value` `Relations`;
+  - `RelationLevelRanges`, assumed to be Enemy ≤ -800, Dislike -799..-201,
+    Neutral -200..200, and Friend 201+.
+- Anomaly prototypes have no localized names, and factions have no localized descriptions.
+- Runtime localization: `/Script/Engine.Default__KismetTextLibrary:FindTextInLocalizationTable(
+  "ST_S2BaseGameLocalization", key, out, "")` returns a bool and fills `out.OutText` (UE4SS
+  out-params land in the passed table under the parameter name). The culture comes from
+  `Default__KismetInternationalizationLibrary:GetCurrentCulture()`. No StringTable asset is
+  loaded for that namespace, so `TextFromStringTable` doesn't apply. ZoneCodex data stores
+  `{sid_...}` templates plus English fallbacks and expands them on the game thread; in-game
+  behaviour is not yet verified, and the log line reports game versus fallback counts.
+- `CppMediator.GetItemsCountInInventory(pawn, sid)` counts only the items the player is carrying.
+  It does not see stashes, discovery history, or reputation.
+- PDA widgets, read from exported `UIRemaster/PDA` blueprints:
+  - The root is `W_PDABookView_C`, native `/Script/Stalker2.PDAView`. Its `Switcher` holds the
+    pages; `W_BestiaryPage_C` is an unused page whose root `Overlay` holds only a red
+    "In Progress" text block.
+  - `NavigationPanel` (`W_PDANavigationPanel_C`) has `W_PDANavPanelSlot_C` buttons.
+    `BestiaryBtn` (`ButtonId "Bestiary"`, `sid_misc_pda_TopPanel_Bestiary` = "Archive") ships
+    `Collapsed` and disabled. Q/E are the `UIPDAPreviosMenu`/`UIPDANextMenu` actions.
+  - ZoneCodex shows and enables that button, collapses the placeholder, and adds its widgets with
+    `AddChildToOverlay`. The page is active when `Switcher:GetActiveWidgetIndex()` equals
+    `GetChildIndex(BestiaryPage)`. Only one mod can use this slot; "Live PDA Tab" mods use it
+    or add native tabs.
+  - Showing the button and adding page content works in game; the navigation panel switches to
+    the page on its own.
+- Upgrades-style layout (`W_UpgradePage`): a 505-wide left column (78-high top bar tinted
+  `#131211`, then `T_pda_questframe_top`/`_tileing`/`_bot`), a 9-wide
+  `T_pda_decorleftline_tileing` divider, a fill right pane, and a 76-high hint bar. Textures are
+  under `/Game/GameLite/FPS_Game/UIRemaster/UITextures/PDA/` (`Journal/`, `PDAView/QuestBackground/`,
+  `PDAView/Frame/MidleFrame/`).
+- `W_Text_C` takes the game's font styles through `TextSettings.FontStyleId` (an FName; create it
+  with `EFindName.FNAME_Add`). Styles used: `PDAQuestSlotName` (18), `PDAQuestDetailsRegion` (11),
+  `PDAQuestDetailsNameMain` (27), `PDAQuestDetails` (17), `PDACurrQuestBtn` (15, dark text).
+- Plain `/Script/UMG.Image` widgets come from `StaticConstructObject(class, page.WidgetTree)` and
+  are placed with Overlay slot padding. ZoneCodex does not instantiate native PDA slot widgets
+  (`PDAUpgradesSlot` and so on) outside their panels.
+- The game's `UImage` has no `SetBrushSize`. Size images by writing `image.Brush.ImageSize`;
+  `SetDesiredSizeOverride` set before parenting does not stick, so images draw at the 32x32
+  default brush size.
+- Click targets on PDA pages: use Slate `IsHovered` on the topmost hit-testable widget.
+  `SlateBlueprintLibrary.IsUnderLocation(widget:GetCachedGeometry(), ...)` never matched in game
+  (UE4SS doesn't marshal the native `FGeometry`). UE4SS mouse keybinds fire from `GetAsyncKeyState`
+  sampling, and the poll runs after the press, so ZoneCodex also accepts the target hovered on the
+  previous poll.
+- UE4SS has no mouse-wheel key (`GetAsyncKeyState` can't see it). ZoneCodex catches the wheel with
+  visible UMG `ScrollBox`es (`SizeBox` → `ScrollBox` with `ConsumeMouseWheel = Always` → a tall
+  `Spacer`). Each poll reads how far `GetScrollOffset` moved from its rest point (32 Slate units per
+  notch, `Slate.GlobalScrollAmount`) and resets it. A catcher steals Slate hover from everything
+  beneath it, so each list row gets its own catcher, which is also that row's hover and click target;
+  one list-wide catcher broke row clicks. The detail text needs no catcher: it sits in a real
+  `ScrollBox`, which scrolls itself.
+- Vanilla Notes (`W_PDANotesDetails`) scrolls its text in a `ScrollBox` whose `WidgetBarStyle`
+  thumbs are flat `#C1B7A8` quads (DrawAs Image on `T_white`, alpha 0.5, 1.0 when hovered or
+  dragged), 3 units thick, with no shadow brushes. A brush with DrawAs Image and no resource
+  draws its tint flat, so ZoneCodex writes those fields one by one (DrawAs and the tint's
+  R/G/B/A); assigning a table over the struct does nothing. Cap the scroll panel's `SizeBox` with
+  `MaxDesiredHeight` so long text can't grow the page, and let the fill slot set the real height.
+- Pictures: mutant renders are `PDA/Stats/Mutants/big/T_*_statisticbig`, referenced from the
+  `ObjPrototypes.cfg` struct whose `NameSID` is the statistics name. Faction badges are
+  `StyleManager/FactionIconsDataTable` rows (`T_icon_fraction_*`); they are white masks that
+  ZoneCodex tints `#CABFB0`. Mutant renders, faction badges, and the Notes-style scroll panel are
+  confirmed in game.
+- Item icons are the prototype's `Icon = Texture2D'/Game/...'`; `PaperSprite` icons are
+  placeholders. Load them with `StaticFindObject`, then `LoadAsset`.
+- UMG tints (`SetColorAndOpacity`, `FLinearColor`) are linear. Convert sRGB hex samples
+  (`((c + 0.055) / 1.055) ^ 2.4`), or every colour renders too bright. Upgrades tab buttons
+  (`W_PDAUpgradesButton`) are `ButtonCollorEnable #232120` and selected `ButtonCollorDisable
+  #CABFB0`; the detail pane is a plain `#141210`. The button's rounded ends are
+  `Journal/T_button_side` (5x50) caps either side of a stretched middle, the right cap mirrored
+  with render scale X = -1, and the label is centred in an Overlay slot; ZoneCodex centres it
+  in a SizeBox slot. Font styles fix the text colour
+  (`bUseFontColor`), so light and dark tab text are separate labels.
+- PDA UI sounds: `/Game/GameLite/FPS_Game/UIRemaster/UISounds/BaseGame_UISounds` maps `EUISound`
+  to Wwise events under `/Game/_STALKER2/Audio/WwiseAudio/Events/UI/` (`PDA/SFX_PDA_JournalTabSwitch`
+  = 32, `PDA/SFX_UI_Upgrade/SFX_UI_Upgrade_Switch` = UpgradeItemSelect 28, ...). No PDA widget
+  asset references a sound: C++ passes the `EUISound` constant to one native player (no
+  UFunction, so UE4SS hooks can't see it). Disassembling `Stalker2-Win64-Shipping.exe` (capstone;
+  rebase the object dump's `[f: ...]` thunk addresses with `.pdata` function starts) shows the
+  Upgrades page posts JournalTabSwitch from `ClickButtonMenu` (its All/Weapon/Armor/Helmet
+  `MenuButtons`) and `UIPDANavigationLeft/Right`, and UpgradeItemSelect from
+  `UpgradeMenuWidget:OnSectionClicked/OnUpgradeClick`. `UIPDANavigationUp/Down` play nothing,
+  and the wheel axis forwards to a list widget virtual. The shipping exe has no RTTI, so native
+  slot clicks are untraceable. From Lua, use `/Script/AkAudio.Default__AkGameplayStatics:
+  PostEventAtLocation(event, location, rotator, worldContext)`, which takes no delegate.
+- The styled layout is mock-tested only; image creation and font styles are not verified in game yet.
+
 ## Trade / misc
 
 - Bartender restock = `TradeRegenHoursPassed8` (8 **game** hours) — sleep before concluding
